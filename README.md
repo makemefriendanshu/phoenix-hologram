@@ -6,6 +6,11 @@ Elixir web app: Phoenix backend + [Hologram](https://www.hologram.page/) fronten
 
 🟡 Scaffold + Hologram wired in, verified at `/hologram` (styled with daisyUI; counter with Increment/Reset). Next: pick the first real feature.
 
+## Links
+
+- Live demo: https://marked-navally-eldon.ngrok-free.dev/hologram
+- Jira project: https://home.atlassian.com/o/a7222d2d-be5e-4578-b4c9-32861c2cc4c5/s/711a8a41-4bbd-40db-8c37-f122f871ce2f/project/VSZJZPCZ-1
+
 ## Stack
 
 - Backend: Elixir, Phoenix
@@ -26,7 +31,10 @@ mix phx.server
 
 | # | Feature | Status |
 |---|---------|--------|
-| 0 | Scaffold (Phoenix + Hologram, daisyUI-styled) | ✅ Done |
+| 0 | Scaffold Phoenix application (no Ecto) | ✅ Done |
+| 1 | Add and configure Hologram, verify with a minimal interactive page | ✅ Done |
+| 2 | Style the Hologram page with daisyUI | ✅ Done |
+| 3 | Add a Reset button to the Hologram counter | ✅ Done |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
