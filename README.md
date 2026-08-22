@@ -1,16 +1,16 @@
 # Phoenix Hologram
 
-An Elixir web application built with the [Phoenix](https://www.phoenixframework.org/) framework on the backend and [Hologram](https://www.hologram.page/) for the frontend — Hologram compiles Elixir to WebAssembly, so the entire stack (routing, business logic, and UI components) is written in Elixir with no separate JavaScript framework.
+An Elixir web application built with the [Phoenix](https://www.phoenixframework.org/) framework on the backend and [Hologram](https://www.hologram.page/) for the frontend — Hologram compiles Elixir to JavaScript, so the entire stack (routing, business logic, and UI components) is written in Elixir with no separate JavaScript framework.
 
 This README is the living plan for the project. Features are additive: each one gets proposed, built, and documented here before the next is started. Treat this file as the single source of truth for "what exists" and "what's next" — update it in the same commit/PR that ships the feature it describes.
 
 ## Status
 
-🟡 Scaffold in progress — the base Phoenix app has been generated (`mix phx.new`); Hologram is not wired in yet.
+🟡 Hologram wired in — a minimal interactive page renders through Phoenix at `/hologram`. Next: decide on the first real feature.
 
 ## What we're doing
 
-Building a web application where the entire stack — backend routing/business logic and frontend UI — is written in Elixir, with Phoenix serving the backend and Hologram (which compiles Elixir to WebAssembly) driving the frontend instead of a separate JavaScript framework. The project is built additively: each feature is proposed, implemented, and fully working before the next one starts, and this README is kept in lockstep with the code as the single changelog and roadmap.
+Building a web application where the entire stack — backend routing/business logic and frontend UI — is written in Elixir, with Phoenix serving the backend and Hologram (which compiles Elixir to JavaScript) driving the frontend instead of a separate JavaScript framework. The project is built additively: each feature is proposed, implemented, and fully working before the next one starts, and this README is kept in lockstep with the code as the single changelog and roadmap.
 
 ## Why we're doing it
 
@@ -41,7 +41,7 @@ mix setup
 mix phx.server
 ```
 
-Then visit `localhost:4000`. Hologram is not wired in yet, so this currently serves a stock Phoenix page.
+Then visit `localhost:4000` for the stock Phoenix page. Hologram is wired in but, like LiveView's code reloader, stays off in `:dev`/`:test` unless explicitly enabled — set `HOLOGRAM_START=1` (or run `mix holo`, which does this for you) and visit `localhost:4000/hologram` for the Hologram-rendered, interactive counter page. Hologram is always on in `:prod`.
 
 ## Feature Log
 
@@ -49,7 +49,7 @@ Each feature is listed here when planned, and its status updated as it moves thr
 
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
-| 0 | Project scaffold (Phoenix + Hologram wired together) | 🟡 In progress | Phoenix app generated via `mix phx.new`; Hologram dependency not yet added |
+| 0 | Project scaffold (Phoenix + Hologram wired together) | ✅ Done | Phoenix app via `mix phx.new`; Hologram added and verified with an interactive page at `/hologram` (see `lib/phoenix_hologram_web/hologram/`) |
 
 Status legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
@@ -65,6 +65,6 @@ This is the part of the plan that matters most: **the README is updated alongsid
 ## Roadmap / Next Steps
 
 - [x] Scaffold the Phoenix application (`mix phx.new`).
-- [ ] Add and configure the Hologram dependency.
-- [ ] Verify a minimal Hologram component renders through a Phoenix route.
+- [x] Add and configure the Hologram dependency.
+- [x] Verify a minimal Hologram component renders through a Phoenix route.
 - [ ] Decide on and document the first real feature to build on top of the scaffold.
