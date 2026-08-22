@@ -6,7 +6,21 @@ This README is the living plan for the project. Features are additive: each one 
 
 ## Status
 
-🟡 Planning — no code yet. This document defines the initial scope and the process for growing it.
+🟡 Scaffold in progress — the base Phoenix app has been generated (`mix phx.new`); Hologram is not wired in yet.
+
+## What we're doing
+
+Building a web application where the entire stack — backend routing/business logic and frontend UI — is written in Elixir, with Phoenix serving the backend and Hologram (which compiles Elixir to WebAssembly) driving the frontend instead of a separate JavaScript framework. The project is built additively: each feature is proposed, implemented, and fully working before the next one starts, and this README is kept in lockstep with the code as the single changelog and roadmap.
+
+## Why we're doing it
+
+To validate a single-language, full-stack Elixir workflow — no context-switching between a backend language and a JavaScript frontend, no separate build toolchains to keep in sync, and one mental model (the BEAM/OTP) for both server and client-side behavior. Keeping the README as the source of truth also forces scope discipline: nothing ships without its purpose and status being documented alongside it.
+
+## How we'll know we're successful
+
+- The Phoenix + Hologram scaffold boots and serves a Hologram-rendered UI component through a Phoenix route, with no separate JS framework in the stack.
+- Each feature added after the scaffold ships fully working, end to end, before the next one begins — no half-finished features left in the codebase.
+- The README's Feature Log and Status always match what's actually true of the code, with no drift between docs and implementation.
 
 ## Goals
 
@@ -22,13 +36,12 @@ This README is the living plan for the project. Features are additive: each one 
 
 ## Getting Started
 
-_To be filled in once the initial `mix phx.new` scaffold and Hologram integration are committed._
-
 ```bash
-# placeholder — will be updated once the project is scaffolded
-mix deps.get
+mix setup
 mix phx.server
 ```
+
+Then visit `localhost:4000`. Hologram is not wired in yet, so this currently serves a stock Phoenix page.
 
 ## Feature Log
 
@@ -36,7 +49,7 @@ Each feature is listed here when planned, and its status updated as it moves thr
 
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
-| 0 | Project scaffold (Phoenix + Hologram wired together) | 🔲 Not started | Base app, no business features yet |
+| 0 | Project scaffold (Phoenix + Hologram wired together) | 🟡 In progress | Phoenix app generated via `mix phx.new`; Hologram dependency not yet added |
 
 Status legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
@@ -51,7 +64,7 @@ This is the part of the plan that matters most: **the README is updated alongsid
 
 ## Roadmap / Next Steps
 
-- [ ] Scaffold the Phoenix application (`mix phx.new`).
+- [x] Scaffold the Phoenix application (`mix phx.new`).
 - [ ] Add and configure the Hologram dependency.
 - [ ] Verify a minimal Hologram component renders through a Phoenix route.
 - [ ] Decide on and document the first real feature to build on top of the scaffold.
