@@ -1,5 +1,8 @@
 import Config
 
+config :phoenix_hologram, PhoenixHologram.Repo,
+  database: Path.expand("../priv/face_detection/phoenix_hologram_dev.db", __DIR__)
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #

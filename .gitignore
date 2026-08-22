@@ -43,3 +43,11 @@ npm-debug.log
 /Birthday/
 /Birthday foto/
 
+# Face detection: downloaded ONNX models + bundled ffmpeg binary
+# (fetched by `mix face_detection.setup`), plus SQLite db files.
+/priv/face_detection/models/
+/priv/face_detection/bin/
+*.db
+*.db-shm
+*.db-wal
+

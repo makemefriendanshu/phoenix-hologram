@@ -57,6 +57,14 @@ if config_env() == :prod do
 
   config :phoenix_hologram, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  config :phoenix_hologram, PhoenixHologram.Repo,
+    database:
+      System.get_env("DATABASE_PATH") ||
+        raise("""
+        environment variable DATABASE_PATH is missing.
+        For example: /etc/phoenix_hologram/phoenix_hologram.db
+        """)
+
   config :phoenix_hologram, PhoenixHologramWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
