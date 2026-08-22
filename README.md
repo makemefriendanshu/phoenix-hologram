@@ -4,7 +4,7 @@ Elixir web app: Phoenix backend + [Hologram](https://www.hologram.page/) fronten
 
 ## Status
 
-🟡 Scaffold + Hologram wired in, verified at `/hologram` (styled with daisyUI; counter with Increment/Reset). Next: pick the first real feature.
+🟡 Scaffold + Hologram wired in, verified at `/hologram` (styled with daisyUI; counter with Increment/Reset). Next: face-recognition premiere pipeline — see [Plan](#plan-face-recognition-premiere) below.
 
 ## Links
 
@@ -35,15 +35,27 @@ mix phx.server
 | 1 | Add and configure Hologram, verify with a minimal interactive page | ✅ Done |
 | 2 | Style the Hologram page with daisyUI | ✅ Done |
 | 3 | Add a Reset button to the Hologram counter | ✅ Done |
+| 4 | Face detection service: ingest video, cluster unique faces | 🔲 Not started |
+| 5 | Scene index: map each detected face to its timestamp ranges | 🔲 Not started |
+| 6 | Admin page: per-movie scene browser grouped by face | 🔲 Not started |
+| 7 | Premiere Hall viewer page: schedule a showtime, play its scenes in sync for viewers | 🔲 Not started |
+| 8 | Live comments during a showtime | 🔲 Not started |
+| 9 | Live "who's in focus" polling + share-count tracking | 🔲 Not started |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
-## Roadmap
+## Plan: Face Recognition Premiere
 
-- [x] Scaffold Phoenix (`mix phx.new`)
-- [x] Add Hologram
-- [x] Verify a Hologram page renders
-- [ ] Pick the first real feature
+Scan wedding/event videos (`Anshuman  &  Mausam  Wedding/`, gitignored,
+local-only) for unique faces, review results in an admin page, then screen
+them in a live "premiere hall". Planning only — Feature Log rows 4-9 track
+delivery.
+
+- **O1 Recognize faces**: ingest `.mp4` → detect faces per frame → cluster into unique identities → persist their scene/timestamp ranges.
+- **O2 Admin visibility**: per-movie page of scenes grouped by face; label/merge identities; preview a scene inline.
+- **O3 Viewer page**: admin schedules a showtime; viewers get a page with synced scene playback showing who's in the current scene.
+- **O4 Live comments**: post a comment during a showtime; broadcasts live to co-viewers; admin can moderate.
+- **O5 "Who's in focus" polling**: viewers poll on who's in the current scene; results tallied live; track participant/share counts.
 
 ## Practice
 
