@@ -18,6 +18,7 @@ defmodule PhoenixHologramWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    get "/premiere/videos/:id", VideoController, :show
   end
 
   # Other scopes may use custom stacks.
