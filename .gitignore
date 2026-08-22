@@ -51,3 +51,6 @@ npm-debug.log
 *.db-shm
 *.db-wal
 
+# Generated low-bitrate preview proxies (mix premiere.generate_previews).
+/priv/face_detection/previews/
+
