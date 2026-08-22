@@ -21,9 +21,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.CounterPage do
             Elixir compiled to JavaScript, with no separate JS framework
             involved. Styled with daisyUI.
           </p>
-          <div class="card-actions items-center gap-4 mt-4">
+          <div class="card-actions items-center gap-3 mt-4">
             <button id="increment" $click="increment" class="btn btn-primary">
               Increment
+            </button>
+            <button id="reset" $click="reset" class="btn btn-outline btn-secondary">
+              Reset
             </button>
             <div id="count" class="badge badge-lg badge-secondary">{@count}</div>
           </div>
@@ -35,5 +38,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.CounterPage do
 
   def action(:increment, _params, component) do
     put_state(component, :count, component.state.count + 1)
+  end
+
+  def action(:reset, _params, component) do
+    put_state(component, :count, 0)
   end
 end
