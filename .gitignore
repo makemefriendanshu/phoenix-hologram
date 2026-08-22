@@ -31,6 +31,9 @@ phoenix_hologram-*.tar
 # Ignore digested assets cache.
 /priv/static/cache_manifest.json
 
+# Hologram-generated client-side JS bundles and compiler artifacts.
+/priv/static/hologram/
+
 # In case you use Node.js/npm, you want to ignore these.
 npm-debug.log
 /assets/node_modules/
