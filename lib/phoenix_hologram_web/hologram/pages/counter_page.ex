@@ -11,14 +11,25 @@ defmodule PhoenixHologramWeb.Hologram.Pages.CounterPage do
 
   def template do
     ~HOLO"""
-    <h1>Hologram is wired up</h1>
-    <p>
-      This page is served through the Phoenix endpoint, but rendered and made
-      interactive by Hologram — the click handler below runs Elixir compiled
-      to JavaScript, with no separate JS framework involved.
-    </p>
-    <button id="increment" $click="increment">Increment</button>
-    <p>Count: <strong id="count">{@count}</strong></p>
+    <div class="min-h-screen flex items-center justify-center bg-base-200 p-6">
+      <div class="card w-full max-w-md bg-base-100 shadow-xl">
+        <div class="card-body items-center text-center">
+          <h1 class="card-title text-2xl">Hologram is wired up</h1>
+          <p class="text-sm text-base-content/70">
+            This page is served through the Phoenix endpoint, but rendered and
+            made interactive by Hologram — the click handler below runs
+            Elixir compiled to JavaScript, with no separate JS framework
+            involved. Styled with daisyUI.
+          </p>
+          <div class="card-actions items-center gap-4 mt-4">
+            <button id="increment" $click="increment" class="btn btn-primary">
+              Increment
+            </button>
+            <div id="count" class="badge badge-lg badge-secondary">{@count}</div>
+          </div>
+        </div>
+      </div>
+    </div>
     """
   end
 
