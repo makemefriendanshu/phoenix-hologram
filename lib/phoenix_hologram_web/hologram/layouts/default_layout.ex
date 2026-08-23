@@ -24,7 +24,16 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
     component =
       component
       |> put_state(:hero_images, build_hero_images(movies))
-      |> put_state(:nav_movies, Enum.map(movies, &%{id: &1.id, title: &1.title || &1.path}))
+      |> put_state(
+        :nav_movies,
+        Enum.map(movies, fn movie ->
+          %{
+            id: movie.id,
+            title: movie.title || movie.path,
+            thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail"
+          }
+        end)
+      )
 
     {component, server}
   end
@@ -71,11 +80,26 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
               <div tabindex="0" role="button" class="hover:underline cursor-pointer">Premiere Hall ▾</div>
               <ul
                 tabindex="0"
-                class="dropdown-content menu menu-sm card-stock rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+                class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
               >
-                <li><a href="/premiere">All films</a></li>
+                <li>
+                  <a
+                    href="/premiere"
+                    class="font-display border-b border-primary-content/30 mb-1 hover:bg-secondary hover:text-primary-content"
+                  >
+                    All films
+                  </a>
+                </li>
                 {%for movie <- @nav_movies}
-                  <li><Link to={PlayerPage, id: movie.id}>{movie.title}</Link></li>
+                  <li>
+                    <Link
+                      to={PlayerPage, id: movie.id}
+                      class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content"
+                    >
+                      <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
+                      <span class="truncate">{movie.title}</span>
+                    </Link>
+                  </li>
                 {/for}
               </ul>
             </div>
@@ -84,11 +108,26 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
               <div tabindex="0" role="button" class="hover:underline cursor-pointer">Recognised Faces ▾</div>
               <ul
                 tabindex="0"
-                class="dropdown-content menu menu-sm card-stock rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+                class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
               >
-                <li><a href="/admin">All films</a></li>
+                <li>
+                  <a
+                    href="/admin"
+                    class="font-display border-b border-primary-content/30 mb-1 hover:bg-secondary hover:text-primary-content"
+                  >
+                    All films
+                  </a>
+                </li>
                 {%for movie <- @nav_movies}
-                  <li><Link to={AdminMoviePage, id: movie.id}>{movie.title}</Link></li>
+                  <li>
+                    <Link
+                      to={AdminMoviePage, id: movie.id}
+                      class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content"
+                    >
+                      <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
+                      <span class="truncate">{movie.title}</span>
+                    </Link>
+                  </li>
                 {/for}
               </ul>
             </div>
