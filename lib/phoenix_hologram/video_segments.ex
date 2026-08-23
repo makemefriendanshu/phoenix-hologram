@@ -17,10 +17,10 @@ defmodule PhoenixHologram.VideoSegments do
 
   @target_segment_count 10
 
-  @doc "Lists the cached segment paths for this movie, in order. Empty if not generated yet."
-  @spec list(Movie.t()) :: [String.t()]
-  def list(movie) do
-    dir = segments_dir(movie)
+  @doc "Lists the cached segment paths for this movie/quality, in order. Empty if not generated yet."
+  @spec list(Movie.t(), String.t()) :: [String.t()]
+  def list(movie, quality) do
+    dir = segments_dir(movie, quality)
 
     case File.ls(dir) do
       {:ok, files} -> files |> Enum.sort() |> Enum.map(&Path.join(dir, &1))
@@ -28,20 +28,20 @@ defmodule PhoenixHologram.VideoSegments do
     end
   end
 
-  @doc "Returns the cached segments for this movie, generating them first if needed."
-  @spec ensure_generated!(Movie.t()) :: [String.t()]
-  def ensure_generated!(movie) do
-    case list(movie) do
-      [] -> generate!(movie)
+  @doc "Returns the cached segments for this movie/quality, generating them first if needed."
+  @spec ensure_generated!(Movie.t(), String.t()) :: [String.t()]
+  def ensure_generated!(movie, quality) do
+    case list(movie, quality) do
+      [] -> generate!(movie, quality)
       segments -> segments
     end
   end
 
-  @doc "Splits `movie` into fresh segments, replacing any previously cached ones."
-  @spec generate!(Movie.t()) :: [String.t()]
-  def generate!(movie) do
-    source = VideoPreview.resolve_path(movie)
-    dir = segments_dir(movie)
+  @doc "Splits `movie` into fresh segments at the given quality, replacing any previously cached ones."
+  @spec generate!(Movie.t(), String.t()) :: [String.t()]
+  def generate!(movie, quality) do
+    source = VideoPreview.resolve_quality(movie, quality)
+    dir = segments_dir(movie, quality)
     File.rm_rf!(dir)
     File.mkdir_p!(dir)
 
@@ -64,7 +64,7 @@ defmodule PhoenixHologram.VideoSegments do
 
     case System.cmd(ffmpeg_path!(), args, stderr_to_stdout: true) do
       {_output, 0} ->
-        list(movie)
+        list(movie, quality)
 
       {output, status} ->
         File.rm_rf!(dir)
@@ -82,8 +82,8 @@ defmodule PhoenixHologram.VideoSegments do
     end
   end
 
-  defp segments_dir(%Movie{id: id}) do
-    Path.join([:code.priv_dir(:phoenix_hologram), "face_detection/movie_segments", "#{id}"])
+  defp segments_dir(%Movie{id: id}, quality) do
+    Path.join([:code.priv_dir(:phoenix_hologram), "face_detection/movie_segments", "#{id}", quality])
   end
 
   defp ffmpeg_path! do
