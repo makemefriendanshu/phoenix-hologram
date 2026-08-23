@@ -4,7 +4,12 @@ Elixir web app: Phoenix backend + [Hologram](https://www.hologram.page/) fronten
 
 ## Status
 
-🟡 Scaffold + Hologram wired in, verified at `/hologram` (styled with daisyUI; counter with Increment/Reset). Next: face-recognition premiere pipeline — see [Plan](#plan-face-recognition-premiere) below.
+🟡 Face-recognition premiere pipeline built end to end: ingest → cluster → admin
+scene browser → viewer page with live focus-voting, comments, and likes (see
+[Plan](#plan-face-recognition-premiere) below). Remaining gaps: showtime
+scheduling (the viewer page is always-on per movie, not scheduled) and live
+broadcast of comments/likes to co-viewers (only focus-vote counts are
+currently pushed live — see Feature Log rows 7-9).
 
 ## Links
 
@@ -31,6 +36,11 @@ mix phx.server
 - `mix face_detection.setup` — one-time download of the face detection models (+ a
   bundled `ffmpeg` if none is on PATH); needed before `mix face_detection.ingest PATH`
   will work.
+- `/admin` — lists movies with how many unique faces were recognised in each;
+  `/admin/movies/:id` shows the scene timeline and every face (nameable, with a
+  thumbnail and its own timestamp ranges).
+- `/premiere/:id` — plays a movie with live "who's in focus" voting for the
+  current scene, comments (with replies and likes), and a movie-like button.
 
 ## Feature Log
 
@@ -40,12 +50,12 @@ mix phx.server
 | 1 | Add and configure Hologram, verify with a minimal interactive page | ✅ Done |
 | 2 | Style the Hologram page with daisyUI | ✅ Done |
 | 3 | Add a Reset button to the Hologram counter | ✅ Done |
-| 4 | Face detection service: ingest video, cluster unique faces | ✅ Done — YuNet+SFace via Evision, ffmpeg for frame sampling, clustered by cosine similarity, persisted to SQLite (`mix face_detection.setup` then `mix face_detection.ingest PATH`) |
-| 5 | Scene index: map each detected face to its timestamp ranges | 🔲 Not started |
-| 6 | Admin page: per-movie scene browser grouped by face | 🔲 Not started |
-| 7 | Premiere Hall viewer page: schedule a showtime, play its scenes in sync for viewers | 🔲 Not started |
-| 8 | Live comments during a showtime | 🔲 Not started |
-| 9 | Live "who's in focus" polling + share-count tracking | 🔲 Not started |
+| 4 | Face detection service: ingest video, cluster unique faces | ✅ Done — YuNet+SFace via Evision, ffmpeg for frame sampling, persisted to SQLite (`mix face_detection.setup` then `mix face_detection.ingest PATH`). Clustering assigns each detection to the existing cluster whose running centroid it's most cosine-similar to (not single-linkage — that chains transitively similar-but-distinct faces into one identity over a long video) |
+| 5 | Scene index: map each detected face to its timestamp ranges | ✅ Done — `FaceDetection.SceneIndex.ranges/2` collapses one face's own detections into contiguous timestamp ranges; `scenes/2` derives the movie's real scene timeline (a new scene starts the instant who's on screen changes) |
+| 6 | Admin page: per-movie scene browser grouped by face | ✅ Done — `/admin` lists movies, `/admin/movies/:id` shows the scene timeline (who's on screen, and when) plus every recognised face with a cropped thumbnail, its own timestamp ranges, and an editable name (label + subtitle) |
+| 7 | Premiere Hall viewer page: schedule a showtime, play its scenes in sync for viewers | 🟡 In progress — `/premiere/:id` plays a movie and tracks the current scene client-side (who's on screen, updated as playback advances); no showtime scheduling yet (the page is always available per movie) and playback isn't synced across simultaneous viewers |
+| 8 | Live comments during a showtime | 🟡 In progress — post/reply/like/delete via `Engagement`, but updates only reach the viewer who acted; not yet broadcast live to co-viewers |
+| 9 | Live "who's in focus" polling + share-count tracking | 🟡 In progress — `FocusPoll` voting is genuinely live (broadcast to every viewer of the movie via PubSub); share-count tracking isn't implemented |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
