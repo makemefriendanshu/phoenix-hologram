@@ -28,8 +28,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:movie, movie)
       |> put_state(:session_id, session_id)
       |> put_state(:focus_session_id, focus_session_id)
-      |> put_state(:movie_likes_count, movie && Engagement.movie_likes_count(movie.id) || 0)
-      |> put_state(:movie_liked?, (movie && Engagement.movie_liked?(movie.id, session_id)) || false)
+      |> put_state(:movie_likes_count, (movie && Engagement.movie_likes_count(movie.id)) || 0)
+      |> put_state(
+        :movie_liked?,
+        (movie && Engagement.movie_liked?(movie.id, session_id)) || false
+      )
       |> put_state(:comments, (movie && Engagement.list_comments(movie.id, session_id)) || [])
       |> put_state(:commenter_name, "")
       |> put_state(:new_comment_body, "")
@@ -139,7 +142,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     "#{minutes}:#{padded_seconds}"
   end
 
-  defp voted_ats(votes), do: votes |> Enum.map(& &1.inserted_at) |> Enum.sort({:desc, NaiveDateTime})
+  defp voted_ats(votes),
+    do: votes |> Enum.map(& &1.inserted_at) |> Enum.sort({:desc, NaiveDateTime})
 
   defp format_timestamp(nil), do: nil
   defp format_timestamp(%NaiveDateTime{} = dt), do: Calendar.strftime(dt, "%H:%M:%S UTC")
@@ -163,25 +167,44 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       segment_downloads: segment_downloads,
       segment_count: length(segment_downloads),
       qualities: qualities,
-      selected_quality: selected_quality
+      selected_quality: selected_quality,
+      selected_quality_label: quality_label(qualities, selected_quality)
     }
   end
 
   defp build_qualities(movie, source_metadata) do
-    source = %{key: "source", label: "Original · " <> VideoMetadata.describe_quality(source_metadata)}
+    source = %{
+      key: "source",
+      label: "Original · " <> VideoMetadata.describe_quality(source_metadata)
+    }
 
     case VideoMetadata.fetch_preview(movie) do
       nil ->
         [source]
 
       preview_metadata ->
-        [source, %{key: "preview", label: "Data saver · " <> VideoMetadata.describe_quality(preview_metadata)}]
+        [
+          source,
+          %{
+            key: "preview",
+            label: "Data saver · " <> VideoMetadata.describe_quality(preview_metadata)
+          }
+        ]
     end
+  end
+
+  # Used to label the themed quality-picker dropdown's trigger button with
+  # whichever quality is currently selected (see the two `dropdown` blocks
+  # in the template) — a plain native <select> can't have its open option
+  # list restyled, so quality picking is a daisyUI dropdown/menu instead.
+  defp quality_label(qualities, key) do
+    qualities |> Enum.find(&(&1.key == key)) |> Map.fetch!(:label)
   end
 
   defp video_url(movie_id, quality), do: "/premiere/videos/#{movie_id}?quality=#{quality}"
 
-  defp download_url(movie_id, quality), do: "/premiere/videos/#{movie_id}/download?quality=#{quality}"
+  defp download_url(movie_id, quality),
+    do: "/premiere/videos/#{movie_id}/download?quality=#{quality}"
 
   defp segment_downloads(movie, quality) do
     segment_count = movie |> VideoSegments.ensure_generated!(quality) |> length()
@@ -215,7 +238,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   # parts before — so that part is handed off to a command instead, and
   # arrives a moment later via :segment_downloads_updated.
   def action(:quality_changed, params, component) do
-    quality = params.event.value
+    quality = params.quality
     movie_id = component.state.movie.id
     new_video_url = video_url(movie_id, quality)
     new_download_url = download_url(movie_id, quality)
@@ -238,7 +261,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       component.state.movie
       | video_url: new_video_url,
         download_url: new_download_url,
-        selected_quality: quality
+        selected_quality: quality,
+        selected_quality_label: quality_label(component.state.movie.qualities, quality)
     })
     |> put_command(:switch_download_quality, movie_id: movie_id, quality: quality)
   end
@@ -335,7 +359,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
   def command(:switch_download_quality, %{movie_id: movie_id, quality: quality}, server) do
     movie = Repo.get!(Movie, movie_id)
-    put_action(server, :segment_downloads_updated, segment_downloads: segment_downloads(movie, quality))
+
+    put_action(server, :segment_downloads_updated,
+      segment_downloads: segment_downloads(movie, quality)
+    )
   end
 
   def command(:like_movie, %{movie_id: movie_id}, server) do
@@ -349,7 +376,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     put_action(server, :comment_added, comments: comments)
   end
 
-  def command(:add_reply, %{movie_id: movie_id, parent_id: parent_id, body: body, name: name}, server) do
+  def command(
+        :add_reply,
+        %{movie_id: movie_id, parent_id: parent_id, body: body, name: name},
+        server
+      ) do
     Engagement.add_comment(movie_id, body, server.session_id, name, parent_id)
     comments = Engagement.list_comments(movie_id, server.session_id)
     put_action(server, :reply_added, comments: comments)
@@ -378,7 +409,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         },
         server
       ) do
-    {counts, voted_ats, voted?} = FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, voter_id)
+    {counts, voted_ats, voted?} =
+      FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, voter_id)
 
     put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
       scene_start_ms: scene_start_ms,
@@ -393,21 +425,21 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
   def template do
     ~HOLO"""
-    <div class="min-h-screen bg-base-200 p-6">
+    <div class="min-h-screen p-6">
       <div class="max-w-5xl mx-auto">
         <Link to={PremierePage} class="link link-hover text-sm">&larr; Back to Premiere Hall</Link>
 
         {%if @movie == nil}
-          <div class="card bg-base-100 shadow-xl mt-4">
+          <div class="card card-stock shadow-xl mt-4">
             <div class="card-body">
               <p class="text-base-content/70">This film could not be found.</p>
             </div>
           </div>
         {%else}
-          <h1 class="text-2xl font-semibold mt-4 mb-1">{@movie.title}</h1>
+          <h1 class="font-display text-2xl mt-4 mb-1">{@movie.title}</h1>
           <div class="flex items-center gap-3 mb-4">
             <p class="text-sm text-base-content/70">{@movie.description}</p>
-            <span class="badge badge-outline">{@movie.status}</span>
+            <span class="badge badge-outline badge-primary">{@movie.status}</span>
           </div>
 
           <div class="relative flex flex-col lg:flex-row gap-4">
@@ -424,17 +456,24 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
               {%if length(@movie.qualities) > 1}
                 <div class="flex items-center gap-2 mt-2">
-                  <label for="quality-select" class="text-xs text-base-content/60">Quality</label>
-                  <select
-                    id="quality-select"
-                    $change="quality_changed"
-                    value={@movie.selected_quality}
-                    class="select select-bordered select-xs w-auto"
-                  >
-                    {%for quality <- @movie.qualities}
-                      <option value={quality.key}>{quality.label}</option>
-                    {/for}
-                  </select>
+                  <span class="text-xs text-base-content/60">Quality</span>
+                  <div class="dropdown dropdown-bottom">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                      {@movie.selected_quality_label} ▾
+                    </div>
+                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 p-2 shadow">
+                      {%for quality <- @movie.qualities}
+                        <li>
+                          <a
+                            $click={:quality_changed, quality: quality.key}
+                            class={if quality.key == @movie.selected_quality do "active" else "" end}
+                          >
+                            {quality.label}
+                          </a>
+                        </li>
+                      {/for}
+                    </ul>
+                  </div>
                 </div>
               {/if}
 
@@ -485,9 +524,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             </div>
 
             <div class="flex flex-col lg:absolute lg:inset-y-0 lg:right-0 lg:w-96">
-              <div class="card bg-base-100 shadow flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div class="card card-stock shadow flex-1 flex flex-col min-h-0 overflow-hidden">
                 <div class="card-body py-4 flex-1 flex flex-col min-h-0">
-                  <h2 class="text-lg font-semibold mb-1">Who's in focus?</h2>
+                  <h2 class="font-display text-lg mb-1">Who's in focus?</h2>
                   {%if @current_scene == nil}
                     <p class="text-sm text-base-content/60">No one recognised at this point in the video.</p>
                   {%else}
@@ -528,23 +567,30 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
           </div>
 
-          <div class="mt-6 card bg-base-100 shadow">
+          <div class="mt-6 card card-stock shadow">
             <div class="card-body py-4">
-              <h2 class="text-sm font-semibold mb-3">Download</h2>
+              <h2 class="font-display text-sm mb-3">Download</h2>
 
               {%if length(@movie.qualities) > 1}
                 <div class="flex items-center gap-2 mb-3">
-                  <label for="download-quality-select" class="text-xs text-base-content/60">Quality</label>
-                  <select
-                    id="download-quality-select"
-                    $change="quality_changed"
-                    value={@movie.selected_quality}
-                    class="select select-bordered select-xs w-auto"
-                  >
-                    {%for quality <- @movie.qualities}
-                      <option value={quality.key}>{quality.label}</option>
-                    {/for}
-                  </select>
+                  <span class="text-xs text-base-content/60">Quality</span>
+                  <div class="dropdown dropdown-bottom">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                      {@movie.selected_quality_label} ▾
+                    </div>
+                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 p-2 shadow">
+                      {%for quality <- @movie.qualities}
+                        <li>
+                          <a
+                            $click={:quality_changed, quality: quality.key}
+                            class={if quality.key == @movie.selected_quality do "active" else "" end}
+                          >
+                            {quality.label}
+                          </a>
+                        </li>
+                      {/for}
+                    </ul>
+                  </div>
                 </div>
               {/if}
 
@@ -581,7 +627,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
           </div>
 
           <div class="mt-8">
-            <h2 class="text-lg font-semibold mb-3">Comments</h2>
+            <h2 class="font-display text-lg mb-3">Comments</h2>
 
             <form $submit={command: :add_comment, params: %{movie_id: @movie.id, body: @new_comment_body, name: @commenter_name}}>
               <div class="flex flex-col gap-2 mb-4">
@@ -609,7 +655,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             {%else}
               <div class="flex flex-col gap-3">
                 {%for comment <- @comments}
-                  <div class="card bg-base-100 shadow">
+                  <div class="card card-stock shadow">
                     <div class="card-body py-3">
                       <div class="flex items-start gap-3">
                         <div class="avatar avatar-placeholder shrink-0">

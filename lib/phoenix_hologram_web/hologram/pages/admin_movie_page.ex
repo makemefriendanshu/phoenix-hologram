@@ -550,12 +550,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
 
   def template do
     ~HOLO"""
-    <div class="min-h-screen bg-base-200 p-6">
+    <div class="min-h-screen p-6">
       <div class="max-w-4xl mx-auto">
         <Link to={AdminMoviesPage} class="link link-hover text-sm">&larr; Back to admin</Link>
 
         {%if @movie == nil}
-          <div class="card bg-base-100 shadow-xl mt-4">
+          <div class="card card-stock shadow-xl mt-4">
             <div class="card-body">
               <p class="text-base-content/70">This film could not be found.</p>
             </div>
@@ -568,7 +568,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
               class="w-full sm:w-96 aspect-video object-cover rounded-box shadow"
             />
             <div>
-              <h1 class="text-2xl font-semibold">{@movie.title}</h1>
+              <h1 class="font-display text-2xl">{@movie.title}</h1>
               <p class="text-sm text-base-content/60 mb-2">{@face_count} unique face(s) recognised</p>
               <Link to={PlayerPage, id: @movie.id} class="btn btn-primary btn-sm">
                 Watch in Premiere Hall
@@ -594,7 +594,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
           </div>
 
           {%if @faces == []}
-            <div class="card bg-base-100 shadow-xl">
+            <div class="card card-stock shadow-xl">
               <div class="card-body">
                 <p class="text-base-content/70">
                   No faces detected yet. Run `mix face_detection.ingest` for this movie first.
@@ -604,13 +604,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
           {%else}
             <div class="flex flex-col lg:flex-row gap-8">
               <div class="lg:w-1/2">
-                <h2 class="text-xl font-semibold mb-3">Scenes</h2>
+                <h2 class="font-display text-xl mb-3">Scenes</h2>
                 <p class="text-sm text-base-content/60 mb-3">
                   A new scene starts whenever who's on screen changes.
                 </p>
                 <div class="flex flex-col gap-2">
                   {%for bucket <- @scene_buckets}
-                    <details class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-box">
+                    <details class="collapse collapse-arrow card-stock border border-primary/25 rounded-box">
                       <summary class="collapse-title font-medium">
                         {bucket.label} — {bucket.scene_count} scene(s)
                       </summary>
@@ -627,8 +627,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                                 end
                               }
                             >
-                              <div class="absolute top-2 left-2 z-10 badge badge-neutral gap-1 text-xs font-mono shadow">
-                                <span class="text-[10px] leading-none">▶</span> {scene.time}
+                              <div class="absolute top-2 left-2 z-10 badge badge-neutral gap-1 text-sm font-mono font-bold shadow">
+                                <span class="text-xs leading-none">▶</span> {scene.time}
                               </div>
                               <div class="absolute bottom-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition pointer-events-none">
                                 <div class="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white text-sm">
@@ -674,7 +674,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
               </div>
 
               <div class="lg:w-1/2">
-                <h2 class="text-xl font-semibold mb-3">All recognised faces</h2>
+                <h2 class="font-display text-xl mb-3">All recognised faces</h2>
                 <div class="relative">
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4 max-h-[36rem] overflow-y-auto pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {%for face <- @faces}
@@ -682,7 +682,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                       if face.voted do
                         "card bg-primary/10 border border-primary/40 shadow-xl"
                       else
-                        "card bg-base-100 shadow-xl"
+                        "card card-stock shadow-xl"
                       end
                     }>
                       <figure class="px-4 pt-4">
@@ -698,7 +698,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                         />
                       </figure>
                       <div class="card-body items-center text-center min-h-64">
-                        <h2 class="card-title text-base flex-wrap justify-center">
+                        <h2 class="card-title font-display text-base flex-wrap justify-center">
                           {face.label || "Face ##{face.id}"}
                           {%if face.voted}
                             <span class="badge badge-primary badge-xs align-middle">✓ voted</span>
@@ -731,9 +731,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                             >
                               {scene.time}
                               <span class="absolute -top-2.5 -right-1.5 flex items-center gap-0.5 badge badge-neutral badge-sm px-1 shadow">
-                                <span class="text-[9px] leading-none">▶</span>
+                                <span class="text-xs leading-none">▶</span>
                                 {%if scene.voted}
-                                  <span class="text-[10px] leading-none">{scene.votes}</span>
+                                  <span class="text-xs leading-none">{scene.votes}</span>
                                 {/if}
                               </span>
                             </span>
@@ -779,7 +779,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
           <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div
               $click_outside="close_player"
-              class="bg-base-100 rounded-box shadow-2xl p-4 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+              class="card-stock rounded-box shadow-2xl p-4 w-full max-w-5xl max-h-[90vh] overflow-y-auto"
             >
               <div class="flex justify-between items-center mb-2">
                 <div class="flex items-center gap-2">
@@ -790,34 +790,37 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                 </div>
                 <button $click="close_player" class="btn btn-xs btn-circle btn-ghost">✕</button>
               </div>
-              <video id="scene-video" controls muted class="w-full aspect-video rounded"></video>
 
-              {%if @current_preview_scene != nil}
-                <div class="mt-4">
-                  <h3 class="text-sm font-semibold mb-2">Who's in focus?</h3>
-                  {%if @current_preview_scene.faces == []}
-                    <p class="text-sm text-base-content/60">No one recognised at this point in the scene.</p>
-                  {%else}
-                    <div class="flex flex-wrap gap-2">
-                      {%for face <- @current_preview_scene.faces}
-                        <button
-                          $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_preview_scene.start_ms, scene_end_ms: @current_preview_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
-                          title={Enum.join(face.voted_ats, "\n")}
-                          class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
-                        >
-                          <img src={"/admin/faces/#{face.id}/thumbnail"} class="w-10 h-10 rounded-full object-cover shrink-0" />
-                          <span class="text-xs normal-case text-left leading-tight">
-                            {face.label}<br />{face.votes} vote(s)
-                            {%if face.mine?}
-                              <span class="block font-semibold">✓ your vote</span>
-                            {/if}
-                          </span>
-                        </button>
-                      {/for}
-                    </div>
-                  {/if}
-                </div>
-              {/if}
+              <div class="flex flex-col lg:flex-row gap-4">
+                <video id="scene-video" controls muted class="w-full lg:w-2/3 aspect-video rounded shrink-0"></video>
+
+                {%if @current_preview_scene != nil}
+                  <div class="lg:w-1/3 lg:max-h-[70vh] lg:overflow-y-auto">
+                    <h3 class="text-sm font-semibold mb-2">Who's in focus?</h3>
+                    {%if @current_preview_scene.faces == []}
+                      <p class="text-sm text-base-content/60">No one recognised at this point in the scene.</p>
+                    {%else}
+                      <div class="flex flex-wrap gap-2">
+                        {%for face <- @current_preview_scene.faces}
+                          <button
+                            $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_preview_scene.start_ms, scene_end_ms: @current_preview_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
+                            title={Enum.join(face.voted_ats, "\n")}
+                            class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
+                          >
+                            <img src={"/admin/faces/#{face.id}/thumbnail"} class="w-10 h-10 rounded-full object-cover shrink-0" />
+                            <span class="text-xs normal-case text-left leading-tight">
+                              {face.label}<br />{face.votes} vote(s)
+                              {%if face.mine?}
+                                <span class="block font-semibold">✓ your vote</span>
+                              {/if}
+                            </span>
+                          </button>
+                        {/for}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
             </div>
           </div>
           {/if}
