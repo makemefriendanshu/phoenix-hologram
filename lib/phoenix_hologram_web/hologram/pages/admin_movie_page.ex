@@ -30,7 +30,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
 
     focus_totals = if movie_record, do: FocusPoll.face_totals(movie_record.id), else: %{}
     scene_votes = if movie_record, do: scene_vote_counts(movie_record.id), else: %{}
-    faces = if preloaded, do: Enum.map(preloaded.faces, &face_summary(&1, focus_totals)), else: []
+    faces =
+      if preloaded,
+        do: Enum.map(preloaded.faces, &face_summary(&1, focus_totals, scene_votes)),
+        else: []
     scene_buckets = if preloaded, do: movie_scene_buckets(preloaded, scene_votes), else: []
     movie = movie_record && build_movie(movie_record)
 
@@ -182,16 +185,19 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     |> Enum.flat_map(& &1.detections)
     |> SceneIndex.scenes()
     |> Enum.map(fn scene ->
+      faces =
+        Enum.map(scene.face_ids, fn face_id ->
+          votes = Map.get(scene_votes, {scene.start_ms, scene.end_ms, face_id}, 0)
+          label = Map.get(face_labels, face_id) || "Face ##{face_id}"
+          %{id: face_id, votes: votes, label: label, voted: votes > 0}
+        end)
+
       %{
         time: format_scene(scene),
         start_ms: scene.start_ms,
         end_ms: scene.end_ms,
-        faces:
-          Enum.map(scene.face_ids, fn face_id ->
-            votes = Map.get(scene_votes, {scene.start_ms, scene.end_ms, face_id}, 0)
-            label = Map.get(face_labels, face_id) || "Face ##{face_id}"
-            %{id: face_id, votes: votes, label: label}
-          end)
+        faces: faces,
+        voted: Enum.any?(faces, & &1.voted)
       }
     end)
     |> Enum.group_by(fn scene -> div(scene.start_ms, @bucket_ms) end)
@@ -216,21 +222,48 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     }
   end
 
-  defp face_summary(face, focus_totals) do
+  defp face_summary(face, focus_totals, scene_votes) do
+    voted_intervals = voted_intervals(scene_votes, face.id)
+
     scenes =
       face.detections
       |> SceneIndex.ranges()
       |> Enum.map(fn range ->
-        %{time: format_scene(range), start_ms: range.start_ms, end_ms: range.end_ms}
+        %{
+          time: format_scene(range),
+          start_ms: range.start_ms,
+          end_ms: range.end_ms,
+          voted: overlaps_any?(range, voted_intervals)
+        }
       end)
+
+    focus_votes = Map.get(focus_totals, face.id, 0)
 
     %{
       id: face.id,
       label: face.label,
       subtitle: face.subtitle,
       scenes: scenes,
-      focus_votes: Map.get(focus_totals, face.id, 0)
+      focus_votes: focus_votes,
+      voted: focus_votes > 0
     }
+  end
+
+  # The scenes voted on (see FocusPoll) are segmented by who's on screen
+  # *together*, while a face's own timestamp ranges (SceneIndex.ranges/1)
+  # are segmented by that face's own continuous appearances — the two
+  # rarely share exact boundaries, so a range counts as voted whenever it
+  # overlaps any voted scene for this face.
+  defp voted_intervals(scene_votes, face_id) do
+    scene_votes
+    |> Enum.filter(fn {{_start_ms, _end_ms, fid}, count} -> fid == face_id and count > 0 end)
+    |> Enum.map(fn {{start_ms, end_ms, _fid}, _count} -> {start_ms, end_ms} end)
+  end
+
+  defp overlaps_any?(range, intervals) do
+    Enum.any?(intervals, fn {voted_start_ms, voted_end_ms} ->
+      range.start_ms <= voted_end_ms and voted_start_ms <= range.end_ms
+    end)
   end
 
   defp format_scene(%{start_ms: start_ms, end_ms: end_ms}) do
@@ -313,7 +346,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                   <div class="collapse-content max-h-96 overflow-y-auto">
                     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {%for scene <- bucket.scenes}
-                        <div class="card bg-base-200 shadow-sm min-h-40">
+                        <div class={
+                          if scene.voted do
+                            "card bg-primary/10 border border-primary/40 shadow-sm min-h-40"
+                          else
+                            "card bg-base-200 shadow-sm min-h-40"
+                          end
+                        }>
                           <div class="card-body items-center justify-center text-center p-3">
                             <h3
                               $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
@@ -327,11 +366,22 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                               <div class="flex flex-wrap gap-2 justify-center">
                                 {%for face <- scene.faces}
                                   <div class="flex flex-col items-center gap-0.5">
-                                    <img
-                                      src={"/admin/faces/#{face.id}/thumbnail"}
-                                      title={face.label}
-                                      class="w-14 h-14 rounded-full object-cover ring ring-base-300"
-                                    />
+                                    <div class="relative">
+                                      <img
+                                        src={"/admin/faces/#{face.id}/thumbnail"}
+                                        title={face.label}
+                                        class={
+                                          if face.voted do
+                                            "w-14 h-14 rounded-full object-cover ring-2 ring-primary"
+                                          else
+                                            "w-14 h-14 rounded-full object-cover ring ring-base-300"
+                                          end
+                                        }
+                                      />
+                                      {%if face.voted}
+                                        <span class="absolute -top-1 -right-1 badge badge-primary badge-xs">✓</span>
+                                      {/if}
+                                    </div>
                                     <span class="text-xs text-base-content/60">👁 {face.votes}</span>
                                   </div>
                                 {/for}
@@ -349,12 +399,32 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
             <h2 class="text-xl font-semibold mb-3">All recognised faces</h2>
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[36rem] overflow-y-auto pr-1">
               {%for face <- @faces}
-                <div class="card bg-base-100 shadow-xl">
+                <div class={
+                  if face.voted do
+                    "card bg-primary/10 border border-primary/40 shadow-xl"
+                  else
+                    "card bg-base-100 shadow-xl"
+                  end
+                }>
                   <figure class="px-4 pt-4">
-                    <img src={"/admin/faces/#{face.id}/thumbnail"} class="rounded-box w-full aspect-square object-cover" />
+                    <img
+                      src={"/admin/faces/#{face.id}/thumbnail"}
+                      class={
+                        if face.voted do
+                          "rounded-box w-full aspect-square object-cover ring-2 ring-primary"
+                        else
+                          "rounded-box w-full aspect-square object-cover"
+                        end
+                      }
+                    />
                   </figure>
                   <div class="card-body items-center text-center h-64">
-                    <h2 class="card-title text-base">{face.label || "Face ##{face.id}"}</h2>
+                    <h2 class="card-title text-base">
+                      {face.label || "Face ##{face.id}"}
+                      {%if face.voted}
+                        <span class="badge badge-primary badge-xs align-middle">✓ voted</span>
+                      {/if}
+                    </h2>
                     {%if face.subtitle}
                       <p class="text-xs text-base-content/60 -mt-2">{face.subtitle}</p>
                     {/if}
@@ -365,9 +435,22 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                       {%for scene <- face.scenes}
                         <span
                           $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
-                          class="badge badge-outline cursor-pointer hover:badge-primary"
+                          title={
+                            if scene.voted do
+                              "Voted in focus"
+                            else
+                              ""
+                            end
+                          }
+                          class={
+                            if scene.voted do
+                              "badge badge-primary cursor-pointer"
+                            else
+                              "badge badge-outline cursor-pointer hover:badge-primary"
+                            end
+                          }
                         >
-                          {scene.time}
+                          {%if scene.voted}👁 {/if}{scene.time}
                         </span>
                       {/for}
                     </div>
