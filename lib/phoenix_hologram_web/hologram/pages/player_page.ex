@@ -89,9 +89,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> FocusPoll.all_votes()
       |> Enum.group_by(&{&1.scene_start_ms, &1.scene_end_ms})
 
-    movie_record
-    |> Repo.preload(faces: :detections)
-    |> Map.fetch!(:faces)
+    preloaded_faces = movie_record |> Repo.preload(faces: :detections) |> Map.fetch!(:faces)
+    face_labels = Map.new(preloaded_faces, fn face -> {face.id, face.label} end)
+
+    preloaded_faces
     |> Enum.flat_map(& &1.detections)
     |> SceneIndex.scenes()
     |> Enum.map(fn scene ->
@@ -111,6 +112,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
             %{
               id: face_id,
+              label: Map.get(face_labels, face_id) || "Face ##{face_id}",
               thumbnail_url: "/admin/faces/#{face_id}/thumbnail",
               votes: length(face_votes),
               mine?: MapSet.member?(my_voted_faces, face_id),
@@ -493,18 +495,18 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       <span class="badge badge-outline whitespace-nowrap">{@current_scene.time}</span>
                       <span class="text-xs text-base-content/60">Vote live for who's on screen</span>
                     </div>
-                    <div class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto">
+                    <div class="flex-1 min-h-0 flex flex-wrap gap-2 overflow-y-auto content-start">
                       {%for face <- @current_scene.faces}
                         <button
                           $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
                           title={Enum.join(face.voted_ats, "\n")}
-                          class={if face.mine? do "btn btn-primary h-auto py-3 justify-start gap-3" else "btn btn-outline h-auto py-3 justify-start gap-3" end}
+                          class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                         >
-                          <img src={face.thumbnail_url} class="w-16 h-16 rounded-full object-cover shrink-0" />
-                          <span class="text-base normal-case">
-                            {face.votes} vote(s)
+                          <img src={face.thumbnail_url} class="w-10 h-10 rounded-full object-cover shrink-0" />
+                          <span class="text-xs normal-case text-left leading-tight">
+                            {face.label}<br />{face.votes} vote(s)
                             {%if face.mine?}
-                              <span class="block text-sm font-semibold">✓ your vote</span>
+                              <span class="block font-semibold">✓ your vote</span>
                             {/if}
                           </span>
                         </button>

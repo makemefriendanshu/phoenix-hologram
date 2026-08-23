@@ -43,7 +43,13 @@ mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps preview pr
 - `/` — stock Phoenix page.
 - `/hologram` — Hologram demo page.
 - `/admin`, `/admin/movies/:id` — per-movie scene timeline and recognised faces (nameable, with thumbnails and timestamp ranges badged as playable clips, each carrying a focus-vote count that always matches the scene shown when clicked).
-- `/premiere`, `/premiere/:id` — plays a movie with live "who's in focus" voting (multiple faces per scene; each face shows its vote count, a "your vote" indicator, and the full per-vote timestamp history as a hover tooltip — voting identity is scoped to the page load, so refreshing lets you vote again), comments (replies + likes, each poster naming themselves and shown with an avatar of their name's initial), a like button (same per-page-load scoping as focus votes — each viewing can add one like, and refreshing resets the button so it's ready again, e.g. for a shared/kiosk screen), and a quality selector (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown). Over the ngrok tunnel, large videos are bandwidth-capped (free tier), so playback can stall on multi-GB files — fine on localhost.
+- `/premiere`, `/premiere/:id` — plays a movie, with:
+  - live "who's in focus" voting: multiple named faces per scene, each showing its vote count, a "your vote" indicator, and the full per-vote timestamp history as a hover tooltip (voting identity is scoped to the page load, so refreshing lets you vote again) — laid out as the same compact, wrapping card grid as the admin scene-preview panel
+  - comments (replies + likes), each poster naming themselves and shown with an avatar of their name's initial
+  - a like button (same per-page-load scoping as focus votes — each viewing can add one like, and refreshing resets the button so it's ready again, e.g. for a shared/kiosk screen)
+  - a quality selector (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown)
+
+  Over the ngrok tunnel, large videos are bandwidth-capped (free tier), so playback can stall on multi-GB files — fine on localhost.
 
 ## Feature Log
 
