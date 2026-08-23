@@ -98,6 +98,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   # timer is a plain JS setTimeout started only once play() truly
   # resolves, so it measures real playback time rather than however long
   # metadata took to load.
+  #
+  # Detections are sampled at ~1fps (see PlayerPage), so most scenes and
+  # face ranges are single-instant (start_ms == end_ms, duration_ms == 0)
+  # rather than an actual span — a badge showing one timestamp with no
+  # dash. For those, the media fragment (#t=start, no end) still seeks
+  # the <video> there once loaded, but play() is skipped entirely: with
+  # start and end the same, there's nothing to play, so the player parks
+  # on that exact frame instead of running on indefinitely past it.
   def action(:play_scene_video, params, component) do
     JS.exec("""
     const video = document.getElementById('scene-video');
@@ -107,13 +115,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
       video.src = #{inspect(params.src)};
 
       video.addEventListener('loadedmetadata', () => {
-        video.play()
-          .then(() => {
-            if (#{params.duration_ms} > 0) {
+        if (#{params.duration_ms} > 0) {
+          video.play()
+            .then(() => {
               setTimeout(() => video.pause(), #{params.duration_ms});
-            }
-          })
-          .catch((err) => console.warn('scene preview: play() rejected:', err));
+            })
+            .catch((err) => console.warn('scene preview: play() rejected:', err));
+        }
       }, { once: true });
     }
     """)
