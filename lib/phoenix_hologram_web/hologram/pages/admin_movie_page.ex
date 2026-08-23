@@ -29,7 +29,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     preloaded = movie_record && Repo.preload(movie_record, faces: :detections)
     focus_session_id = Ecto.UUID.generate()
 
-    focus_totals = if movie_record, do: FocusPoll.face_totals(movie_record.id), else: %{}
     votes_by_scene = if movie_record, do: scene_votes_by_key(movie_record.id), else: %{}
 
     scenes_list =
@@ -41,7 +40,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
       if preloaded,
         do:
           preloaded.faces
-          |> Enum.map(&face_summary(&1, focus_totals, scenes_list))
+          |> Enum.map(&face_summary(&1, scenes_list))
           |> Enum.sort_by(& &1.focus_votes, :desc),
         else: []
 
@@ -217,9 +216,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     faces =
       update_face_focus(
         component.state.faces,
+        scenes,
+        key,
         params.face_id,
-        params.scene_start_ms,
-        params.scene_end_ms,
         new_votes_in_scene - old_votes_in_scene
       )
 
@@ -247,15 +246,21 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     end)
   end
 
-  defp update_face_focus(faces, face_id, scene_start_ms, scene_end_ms, delta) do
-    changed_scene = %{start_ms: scene_start_ms, end_ms: scene_end_ms}
-
+  # Mirrors votes_for_face_at/3: only the range whose *determining* scene
+  # (the one find_scene_at/2 would resolve to at the range's start — same
+  # scene that opens when the range is clicked) is the scene that just
+  # changed gets the delta. focus_votes is re-summed from the (possibly
+  # unchanged) ranges rather than adjusted by the raw delta, since a vote
+  # can land on a scene that isn't any range's determining scene — the
+  # header must stay the sum of what's actually shown below it (see
+  # face_summary/2), not drift by a delta no pill reflected.
+  defp update_face_focus(faces, scenes, changed_key, face_id, delta) do
     faces
     |> Enum.map(fn face ->
       if face.id == face_id do
         ranges =
           Enum.map(face.scenes, fn range ->
-            if overlaps?(range, changed_scene) do
+            if determining_scene_key(scenes, range.start_ms) == changed_key do
               votes = range.votes + delta
               %{range | votes: votes, voted: votes > 0}
             else
@@ -263,13 +268,20 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
             end
           end)
 
-        focus_votes = face.focus_votes + delta
+        focus_votes = ranges |> Enum.map(& &1.votes) |> Enum.sum()
         %{face | scenes: ranges, focus_votes: focus_votes, voted: focus_votes > 0}
       else
         face
       end
     end)
     |> Enum.sort_by(& &1.focus_votes, :desc)
+  end
+
+  defp determining_scene_key(scenes, ms) do
+    case find_scene_at(scenes, ms) do
+      nil -> nil
+      scene -> scene_key(scene)
+    end
   end
 
   def command(:persist_label, params, server) do
@@ -336,13 +348,18 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   # the "who's on screen together" scenes fully partition the timeline with
   # no gaps, the last one starting at or before `ms` is always the scene
   # actually playing at that instant, regardless of which grid it was
-  # clicked from.
+  # clicked from. Also the single source of truth for which scene "owns" a
+  # given point in time, so a badge's vote count (see votes_for_face_at/3)
+  # always agrees with the scene that opens when that badge is clicked.
   defp find_scene_at(scenes, ms) do
     scenes
-    |> Map.values()
+    |> scene_values()
     |> Enum.filter(&(&1.start_ms <= ms))
     |> Enum.max_by(& &1.start_ms, fn -> nil end)
   end
+
+  defp scene_values(scenes) when is_map(scenes), do: Map.values(scenes)
+  defp scene_values(scenes) when is_list(scenes), do: scenes
 
   defp scene_votes_by_key(movie_id) do
     movie_id
@@ -412,14 +429,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     }
   end
 
-  defp face_summary(face, focus_totals, scenes_list) do
-    vote_scenes = face_vote_scenes(scenes_list, face.id)
-
+  defp face_summary(face, scenes_list) do
     scenes =
       face.detections
       |> SceneIndex.ranges()
       |> Enum.map(fn range ->
-        votes = overlapping_votes(range, vote_scenes)
+        votes = votes_for_face_at(scenes_list, face.id, range.start_ms)
 
         %{
           time: format_scene(range),
@@ -430,7 +445,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         }
       end)
 
-    focus_votes = Map.get(focus_totals, face.id, 0)
+    # Derived as the sum of the pills above (rather than FocusPoll's raw
+    # per-face total) so this header always agrees with what's visibly
+    # enumerated underneath it — see votes_for_face_at/3 for why a pill's
+    # count can be less than the number of votes actually cast for scenes
+    # it spans.
+    focus_votes = scenes |> Enum.map(& &1.votes) |> Enum.sum()
 
     %{
       id: face.id,
@@ -445,26 +465,19 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   # The scenes voted on (see FocusPoll) are segmented by who's on screen
   # *together*, while a face's own timestamp ranges (SceneIndex.ranges/1)
   # are segmented by that face's own continuous appearances — the two
-  # rarely share exact boundaries, so a range's vote count is the sum of
-  # every voted scene it overlaps for this face.
-  defp face_vote_scenes(scenes_list, face_id) do
-    Enum.flat_map(scenes_list, fn scene ->
-      case Enum.find(scene.faces, &(&1.id == face_id and &1.voted)) do
-        nil -> []
-        face -> [%{start_ms: scene.start_ms, end_ms: scene.end_ms, votes: face.votes}]
-      end
-    end)
-  end
-
-  defp overlapping_votes(range, vote_scenes) do
-    vote_scenes
-    |> Enum.filter(&overlaps?(range, &1))
-    |> Enum.map(& &1.votes)
-    |> Enum.sum()
-  end
-
-  defp overlaps?(range, other) do
-    range.start_ms <= other.end_ms and other.start_ms <= range.end_ms
+  # rarely share exact boundaries, so a range can span more than one
+  # "who's on screen together" scene. Clicking a range always opens the
+  # vote panel for whichever of those scenes is playing at the range's
+  # *start* (see find_scene_at/2 and action(:show_scene)), so the badge
+  # shows that one scene's vote count to always agree with the panel —
+  # deliberately chosen over summing every scene the range overlaps, which
+  # matches the "N in focus" total but can show more on the badge than a
+  # click-through ever reveals.
+  defp votes_for_face_at(scenes_list, face_id, start_ms) do
+    case find_scene_at(scenes_list, start_ms) do
+      nil -> 0
+      scene -> scene.faces |> Enum.find(&(&1.id == face_id)) |> face_votes()
+    end
   end
 
   defp format_scene(%{start_ms: start_ms, end_ms: end_ms}) do
@@ -559,16 +572,21 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                               $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
                               class={
                                 if scene.voted do
-                                  "card bg-primary/10 border border-primary/40 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:border-primary"
+                                  "group relative overflow-hidden card bg-primary/10 border border-primary/40 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:border-primary"
                                 else
-                                  "card bg-base-200 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:bg-base-300"
+                                  "group relative overflow-hidden card bg-base-200 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:bg-base-300"
                                 end
                               }
                             >
-                              <div class="card-body items-center justify-center text-center p-3">
-                                <h3 class="card-title text-sm">
-                                  {scene.time}
-                                </h3>
+                              <div class="absolute top-2 left-2 z-10 badge badge-neutral gap-1 text-xs font-mono shadow">
+                                <span class="text-[10px] leading-none">▶</span> {scene.time}
+                              </div>
+                              <div class="absolute bottom-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                                <div class="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white text-sm">
+                                  ▶
+                                </div>
+                              </div>
+                              <div class="card-body items-center justify-center text-center p-3 pt-9">
                                 {%if scene.faces == []}
                                   <span class="text-xs text-base-content/60">no one recognised</span>
                                 {%else}
@@ -643,29 +661,32 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                         <div class="badge badge-secondary badge-lg gap-1 text-base">
                           <span class="text-lg leading-none">👁</span> {face.focus_votes} in focus
                         </div>
-                        <div class="flex flex-wrap gap-1 justify-center w-full max-h-24 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:oklch(50%_0_0/50%)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[oklch(50%_0_0/50%)] [&::-webkit-scrollbar-thumb]:rounded-full">
+                        <div class="flex flex-wrap gap-x-2 gap-y-3 justify-center w-full max-h-24 overflow-y-auto pt-2 pr-2 [scrollbar-width:thin] [scrollbar-color:oklch(50%_0_0/50%)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[oklch(50%_0_0/50%)] [&::-webkit-scrollbar-thumb]:rounded-full">
                           {%for scene <- face.scenes}
                             <span
                               $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
                               title={
                                 if scene.voted do
-                                  "#{scene.votes} focus vote(s)"
+                                  "#{scene.votes} focus vote(s) — click to play"
                                 else
-                                  ""
+                                  "Click to play"
                                 end
                               }
                               class={
                                 if scene.voted do
-                                  "badge badge-primary gap-1 cursor-pointer"
+                                  "relative badge badge-primary cursor-pointer pr-4"
                                 else
-                                  "badge badge-outline cursor-pointer hover:badge-primary"
+                                  "relative badge badge-outline cursor-pointer hover:badge-primary pr-4"
                                 end
                               }
                             >
-                              {%if scene.voted}
-                                <span class="badge badge-neutral badge-xs">{scene.votes}</span>
-                              {/if}
                               {scene.time}
+                              <span class="absolute -top-2.5 -right-1.5 flex items-center gap-0.5 badge badge-neutral badge-sm px-1 shadow">
+                                <span class="text-[9px] leading-none">▶</span>
+                                {%if scene.voted}
+                                  <span class="text-[10px] leading-none">{scene.votes}</span>
+                                {/if}
+                              </span>
                             </span>
                           {/for}
                         </div>
