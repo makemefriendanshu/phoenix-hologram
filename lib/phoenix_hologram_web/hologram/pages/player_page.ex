@@ -137,6 +137,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     metadata = VideoMetadata.fetch(movie)
     qualities = build_qualities(movie, metadata)
     selected_quality = if VideoPreview.preview_ready?(movie), do: "preview", else: "source"
+    segment_downloads = segment_downloads(movie, selected_quality)
 
     %{
       id: movie.id,
@@ -146,7 +147,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       video_url: video_url(movie.id, selected_quality),
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail",
       download_url: download_url(movie.id, selected_quality),
-      segment_downloads: segment_downloads(movie, selected_quality),
+      segment_downloads: segment_downloads,
+      segment_count: length(segment_downloads),
       qualities: qualities,
       selected_quality: selected_quality
     }
@@ -229,7 +231,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   end
 
   def action(:segment_downloads_updated, params, component) do
-    put_state(component, :movie, %{component.state.movie | segment_downloads: params.segment_downloads})
+    put_state(component, :movie, %{
+      component.state.movie
+      | segment_downloads: params.segment_downloads,
+        segment_count: length(params.segment_downloads)
+    })
   end
 
   def action(:update_comment_body, params, component) do
@@ -492,37 +498,55 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
           </div>
 
-          <div class="mt-6">
-            <h2 class="text-sm font-semibold mb-2">Download</h2>
-            {%if length(@movie.qualities) > 1}
-              <div class="flex items-center gap-2 mb-3">
-                <label for="download-quality-select" class="text-xs text-base-content/60">Quality</label>
-                <select
-                  id="download-quality-select"
-                  $change="quality_changed"
-                  value={@movie.selected_quality}
-                  class="select select-bordered select-xs w-auto"
-                >
-                  {%for quality <- @movie.qualities}
-                    <option value={quality.key}>{quality.label}</option>
-                  {/for}
-                </select>
-              </div>
-            {/if}
-            <a href={@movie.download_url} download class="btn btn-sm btn-outline mb-2">
-              Download full movie
-            </a>
-            <p class="text-xs text-base-content/60 mb-2">
-              Or download in parts — each part is its own independently playable clip
-              (no need to join them), useful on a slow connection since each can be
-              retried on its own:
-            </p>
-            <div class="flex flex-wrap gap-2">
-              {%for segment <- @movie.segment_downloads}
-                <a href={segment.url} download class="btn btn-xs btn-outline">
-                  Part {segment.part}
+          <div class="mt-6 card bg-base-100 shadow">
+            <div class="card-body py-4">
+              <h2 class="text-sm font-semibold mb-3">Download</h2>
+
+              {%if length(@movie.qualities) > 1}
+                <div class="flex items-center gap-2 mb-3">
+                  <label for="download-quality-select" class="text-xs text-base-content/60">Quality</label>
+                  <select
+                    id="download-quality-select"
+                    $change="quality_changed"
+                    value={@movie.selected_quality}
+                    class="select select-bordered select-xs w-auto"
+                  >
+                    {%for quality <- @movie.qualities}
+                      <option value={quality.key}>{quality.label}</option>
+                    {/for}
+                  </select>
+                </div>
+              {/if}
+
+              <div class="flex flex-wrap items-center gap-2">
+                <a href={@movie.download_url} download class="btn btn-sm btn-primary">
+                  Download full movie
                 </a>
-              {/for}
+
+                {%if @movie.segment_count > 0}
+                  <div class="dropdown dropdown-bottom">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                      Download in parts ({@movie.segment_count}) ▾
+                    </div>
+                    <ul
+                      tabindex="0"
+                      class="dropdown-content menu menu-sm bg-base-100 rounded-box z-10 mt-1 w-44 p-2 shadow"
+                    >
+                      {%for segment <- @movie.segment_downloads}
+                        <li>
+                          <a href={segment.url} download>Part {segment.part}</a>
+                        </li>
+                      {/for}
+                    </ul>
+                  </div>
+                {/if}
+              </div>
+
+              <p class="text-xs text-base-content/60 mt-2">
+                Parts are independently playable clips — no need to join them. Handy on a slow
+                connection since each part can be retried on its own instead of restarting the
+                whole download.
+              </p>
             </div>
           </div>
 
