@@ -71,7 +71,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         else: "#{start_seconds}"
 
     src = "/premiere/videos/#{params.movie_id}#t=#{fragment}"
-    scene = Map.get(component.state.scenes, scene_key(params.start_ms, params.end_ms))
+    scene = find_scene_at(component.state.scenes, params.start_ms)
 
     component
     |> put_state(:scene_open, true)
@@ -161,54 +161,107 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     put_state(component, :movie, %{component.state.movie | title: params.title})
   end
 
+  # A movie can have thousands of detections and hundreds of scenes (see
+  # SceneIndex.scenes/1), and this action runs on the client — rebuilding
+  # every derived structure (scene_buckets, every face's totals) from the
+  # full scene list on each vote made the client's interpreter visibly
+  # freeze for a moment on every click. Instead this only touches the one
+  # scene that changed and, for the voting face, the movie-wide total via
+  # an O(1) delta rather than a full re-sum — the one unavoidably broader
+  # pass (re-checking which of the face's own ranges are still voted) only
+  # runs when this vote removed the *last* vote for that face in that
+  # scene, since that's the only case where a range could stop overlapping
+  # any voted scene.
   def action(:focus_vote_updated, params, component) do
     my_session_id = component.state.session_id
     is_mine = params.voter_session_id == my_session_id
     key = scene_key(params.scene_start_ms, params.scene_end_ms)
 
-    scenes =
-      Map.update!(component.state.scenes, key, fn scene ->
-        faces =
-          Enum.map(scene.faces, fn face ->
-            votes = Map.get(params.counts, face.id, 0)
+    old_scene = Map.fetch!(component.state.scenes, key)
+    old_votes_in_scene = old_scene.faces |> Enum.find(&(&1.id == params.face_id)) |> face_votes()
+    new_votes_in_scene = Map.get(params.counts, params.face_id, 0)
 
-            mine? =
-              if is_mine and face.id == params.face_id, do: params.voted?, else: face.mine?
+    updated_faces =
+      Enum.map(old_scene.faces, fn face ->
+        votes = Map.get(params.counts, face.id, 0)
 
-            %{face | votes: votes, mine?: mine?, voted: votes > 0}
-          end)
+        mine? =
+          if is_mine and face.id == params.face_id, do: params.voted?, else: face.mine?
 
-        %{scene | faces: faces, voted: Enum.any?(faces, & &1.voted)}
+        %{face | votes: votes, mine?: mine?, voted: votes > 0}
       end)
+
+    updated_scene = %{old_scene | faces: updated_faces, voted: Enum.any?(updated_faces, & &1.voted)}
+    scenes = Map.put(component.state.scenes, key, updated_scene)
 
     current_preview_scene =
       case component.state.current_preview_scene do
         %{start_ms: s, end_ms: e} when s == params.scene_start_ms and e == params.scene_end_ms ->
-          Map.get(scenes, key)
+          updated_scene
 
         other ->
           other
       end
 
-    scenes_list = Map.values(scenes)
-    voted_intervals = voted_intervals(scenes_list, params.face_id)
-    total_votes = total_votes_for_face(scenes_list, params.face_id)
-
     faces =
-      Enum.map(component.state.faces, fn face ->
-        if face.id == params.face_id do
-          ranges = Enum.map(face.scenes, &%{&1 | voted: overlaps_any?(&1, voted_intervals)})
-          %{face | scenes: ranges, focus_votes: total_votes, voted: total_votes > 0}
-        else
-          face
-        end
-      end)
+      update_face_focus(
+        component.state.faces,
+        scenes,
+        params.face_id,
+        params.scene_start_ms,
+        params.scene_end_ms,
+        old_votes_in_scene,
+        new_votes_in_scene
+      )
 
     component
     |> put_state(:scenes, scenes)
     |> put_state(:current_preview_scene, current_preview_scene)
-    |> put_state(:scene_buckets, scene_buckets(scenes_list))
+    |> put_state(:scene_buckets, update_scene_bucket(component.state.scene_buckets, key, updated_scene))
     |> put_state(:faces, faces)
+  end
+
+  defp face_votes(nil), do: 0
+  defp face_votes(face), do: face.votes
+
+  defp update_scene_bucket(scene_buckets, key, updated_scene) do
+    Enum.map(scene_buckets, fn bucket ->
+      if Enum.any?(bucket.scenes, &(scene_key(&1) == key)) do
+        scenes = Enum.map(bucket.scenes, &if(scene_key(&1) == key, do: updated_scene, else: &1))
+        %{bucket | scenes: scenes}
+      else
+        bucket
+      end
+    end)
+  end
+
+  defp update_face_focus(faces, scenes, face_id, scene_start_ms, scene_end_ms, old_votes, new_votes) do
+    became_voted? = old_votes == 0 and new_votes > 0
+    became_unvoted? = old_votes > 0 and new_votes == 0
+    delta = new_votes - old_votes
+
+    Enum.map(faces, fn face ->
+      if face.id == face_id do
+        ranges =
+          cond do
+            became_voted? ->
+              newly_voted = [{scene_start_ms, scene_end_ms}]
+              Enum.map(face.scenes, &if(overlaps_any?(&1, newly_voted), do: %{&1 | voted: true}, else: &1))
+
+            became_unvoted? ->
+              voted_intervals = voted_intervals(Map.values(scenes), face.id)
+              Enum.map(face.scenes, &%{&1 | voted: overlaps_any?(&1, voted_intervals)})
+
+            true ->
+              face.scenes
+          end
+
+        focus_votes = face.focus_votes + delta
+        %{face | scenes: ranges, focus_votes: focus_votes, voted: focus_votes > 0}
+      else
+        face
+      end
+    end)
   end
 
   def command(:persist_label, params, server) do
@@ -258,6 +311,23 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   # focus-vote broadcast comes in, rather than a scan through every scene.
   defp scene_key(%{start_ms: start_ms, end_ms: end_ms}), do: "#{start_ms}:#{end_ms}"
   defp scene_key(start_ms, end_ms), do: "#{start_ms}:#{end_ms}"
+
+  # The "Scenes" grid's timestamps come straight from the "who's on screen
+  # together" scenes and match a scenes-map key exactly, but a face's own
+  # timestamp badges under "All recognised faces" come from that face's
+  # continuous-appearance ranges (SceneIndex.ranges/1) — a different
+  # segmentation that rarely shares boundaries with the former, so an exact
+  # key lookup misses and the voting panel silently doesn't appear. Since
+  # the "who's on screen together" scenes fully partition the timeline with
+  # no gaps, the last one starting at or before `ms` is always the scene
+  # actually playing at that instant, regardless of which grid it was
+  # clicked from.
+  defp find_scene_at(scenes, ms) do
+    scenes
+    |> Map.values()
+    |> Enum.filter(&(&1.start_ms <= ms))
+    |> Enum.max_by(& &1.start_ms, fn -> nil end)
+  end
 
   defp scene_votes_by_key(movie_id) do
     movie_id
@@ -370,17 +440,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     end)
   end
 
-  # A face's movie-wide total is the sum of its per-scene vote counts —
-  # every Vote row belongs to exactly one (scene, face) pair, and each
-  # scene lists a face only when it's actually on screen there.
-  defp total_votes_for_face(scenes_list, face_id) do
-    scenes_list
-    |> Enum.flat_map(& &1.faces)
-    |> Enum.filter(&(&1.id == face_id))
-    |> Enum.map(& &1.votes)
-    |> Enum.sum()
-  end
-
   defp format_scene(%{start_ms: start_ms, end_ms: end_ms}) do
     if start_ms == end_ms do
       format_time(start_ms)
@@ -461,18 +520,18 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                   <div class="collapse-content max-h-96 overflow-y-auto">
                     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {%for scene <- bucket.scenes}
-                        <div class={
-                          if scene.voted do
-                            "card bg-primary/10 border border-primary/40 shadow-sm min-h-40"
-                          else
-                            "card bg-base-200 shadow-sm min-h-40"
-                          end
-                        }>
+                        <div
+                          $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
+                          class={
+                            if scene.voted do
+                              "card bg-primary/10 border border-primary/40 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:border-primary"
+                            else
+                              "card bg-base-200 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:bg-base-300"
+                            end
+                          }
+                        >
                           <div class="card-body items-center justify-center text-center p-3">
-                            <h3
-                              $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
-                              class="card-title text-sm cursor-pointer hover:text-primary"
-                            >
+                            <h3 class="card-title text-sm">
                               {scene.time}
                             </h3>
                             {%if scene.faces == []}
