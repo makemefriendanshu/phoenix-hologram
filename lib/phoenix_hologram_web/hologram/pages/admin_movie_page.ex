@@ -217,7 +217,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
       update_face_focus(
         component.state.faces,
         scenes,
-        key,
+        old_scene,
         params.face_id,
         new_votes_in_scene - old_votes_in_scene
       )
@@ -235,9 +235,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   defp face_votes(nil), do: 0
   defp face_votes(face), do: face.votes
 
+  # Which bucket holds the changed scene is known outright from its
+  # start_ms (see scene_buckets/1's bucketing), so this only needs to find
+  # that one bucket by its (O(1)-comparable) index rather than scanning
+  # every bucket's full scene list with Enum.any? just to rule it out —
+  # each such scan visibly added up in Hologram's client-side interpreter.
   defp update_scene_bucket(scene_buckets, key, updated_scene) do
+    target_index = div(updated_scene.start_ms, @bucket_ms)
+
     Enum.map(scene_buckets, fn bucket ->
-      if Enum.any?(bucket.scenes, &(scene_key(&1) == key)) do
+      if bucket.index == target_index do
         scenes = Enum.map(bucket.scenes, &if(scene_key(&1) == key, do: updated_scene, else: &1))
         %{bucket | scenes: scenes}
       else
@@ -254,13 +261,26 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   # can land on a scene that isn't any range's determining scene — the
   # header must stay the sum of what's actually shown below it (see
   # face_summary/2), not drift by a delta no pill reflected.
-  defp update_face_focus(faces, scenes, changed_key, face_id, delta) do
+  #
+  # This runs client-side on every vote, so unlike votes_for_face_at/3 it
+  # can't afford to call find_scene_at/2 (an O(total_scenes) scan) once per
+  # range: a face with dozens of ranges in a movie with hundreds of scenes
+  # made every click freeze the tab. Since scene start_ms values are unique
+  # and find_scene_at/2 always resolves to the last scene starting at or
+  # before a point, "range's determining scene is the changed scene" is
+  # equivalent to "range.start_ms falls in [changed_scene.start_ms, start_ms
+  # of the next scene after it)" — a boundary computed once per vote below,
+  # then checked per range in O(1).
+  defp update_face_focus(faces, scenes, changed_scene, face_id, delta) do
+    next_start = next_scene_start(scenes, changed_scene.start_ms)
+
     faces
     |> Enum.map(fn face ->
       if face.id == face_id do
         ranges =
           Enum.map(face.scenes, fn range ->
-            if determining_scene_key(scenes, range.start_ms) == changed_key do
+            if changed_scene.start_ms <= range.start_ms and
+                 (is_nil(next_start) or range.start_ms < next_start) do
               votes = range.votes + delta
               %{range | votes: votes, voted: votes > 0}
             else
@@ -277,11 +297,20 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     |> Enum.sort_by(& &1.focus_votes, :desc)
   end
 
-  defp determining_scene_key(scenes, ms) do
-    case find_scene_at(scenes, ms) do
-      nil -> nil
-      scene -> scene_key(scene)
-    end
+  # Written as a plain reduce (rather than Enum.min/2 with an empty-list
+  # fallback) because Hologram's client-side Enum.min/2 doesn't support that
+  # fallback arg the way Elixir does — it crashes with
+  # "no function clause matching in :lists.min/1" instead of running it.
+  defp next_scene_start(scenes, changed_start) do
+    scenes
+    |> scene_values()
+    |> Enum.reduce(nil, fn scene, closest ->
+      cond do
+        scene.start_ms <= changed_start -> closest
+        is_nil(closest) or scene.start_ms < closest -> scene.start_ms
+        true -> closest
+      end
+    end)
   end
 
   def command(:persist_label, params, server) do
@@ -411,6 +440,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     |> Enum.sort_by(fn {bucket_index, _scenes} -> bucket_index end)
     |> Enum.map(fn {bucket_index, scenes} ->
       %{
+        index: bucket_index,
         label:
           "#{format_time(bucket_index * @bucket_ms)}–#{format_time((bucket_index + 1) * @bucket_ms)}",
         scene_count: length(scenes),

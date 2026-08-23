@@ -1,6 +1,6 @@
 # Phoenix Hologram
 
-Elixir web app: Phoenix backend + [Hologram](https://www.hologram.page/) frontend (compiles Elixir to JS, no separate JS framework). Built additively, one working feature at a time; keep this README in sync with the code — update it in the same commit as the feature it describes.
+Elixir web app: Phoenix backend + [Hologram](https://www.hologram.page/) frontend (compiles Elixir to JS, no separate JS framework). Built additively, one working feature at a time.
 
 ## Status
 
@@ -55,7 +55,7 @@ mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps preview pr
 | 3 | Add a Reset button to the Hologram counter | ✅ Done |
 | 4 | Face detection: ingest video, cluster unique faces | ✅ Done — YuNet+SFace via Evision, ffmpeg for frame sampling. Clusters by running-centroid cosine similarity, not single-linkage (avoids chaining distinct faces together) |
 | 5 | Scene index: map each face to its timestamp ranges | ✅ Done — `FaceDetection.SceneIndex` collapses detections into ranges and derives the movie's scene timeline |
-| 6 | Admin page: per-movie scene browser grouped by face | ✅ Done — Scenes and All recognised faces laid out side by side, faces ranked by focus-vote count; admins can also cast focus votes from the scene preview, synced live with `/premiere/:id` over the same PubSub channel. Timestamp badges read as playable clips (play-icon chip) and each one's vote count always matches the scene that opens when clicked, so a face's "N in focus" total is exactly the sum of its badges. Each badge also carries a "your vote" indicator and every vote's timestamp as a hover tooltip |
+| 6 | Admin page: per-movie scene browser grouped by face | ✅ Done — Scenes and All recognised faces laid out side by side, faces ranked by focus-vote count; admins can also cast focus votes from the scene preview, synced live with `/premiere/:id` over the same PubSub channel. Timestamp badges read as playable clips (play-icon chip) and each one's vote count always matches the scene that opens when clicked, so a face's "N in focus" total is exactly the sum of its badges. Each badge also carries a "your vote" indicator and every vote's timestamp as a hover tooltip. Casting a vote stays responsive on movies with hundreds of scenes — the client-side update after a vote is O(1) per affected timestamp range and O(1) per scene bucket, not a full rescan (that rescan used to hang or crash the tab on a click) |
 | 7 | Premiere Hall viewer page: scheduled, synced playback | 🟡 No showtime scheduling yet; playback not synced across viewers |
 | 8 | Live comments during a showtime | 🟡 Post/reply/like/delete works but isn't broadcast live to co-viewers |
 | 9 | Live focus-voting + share-count tracking | 🟡 Focus voting is live (PubSub) and allows multiple faces per scene; share-count tracking not implemented |
@@ -64,4 +64,4 @@ Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
 ## Practice
 
-New feature → add a `Not started` row above → flip to `In progress` while building → flip to `Done` with a one-line note when it ships. Code is truth; if this file drifts from it, fix the file.
+New feature → add a `Not started` row above → flip to `In progress` while building → flip to `Done` with a one-line note when it ships. Keep this README in sync with the code — update it in the same commit as the feature it describes. Code is truth; if this file drifts from it, fix the file.
