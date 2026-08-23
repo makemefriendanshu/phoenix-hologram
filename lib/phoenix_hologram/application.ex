@@ -8,11 +8,11 @@ defmodule PhoenixHologram.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      PhoenixHologram.Repo,
       PhoenixHologramWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:phoenix_hologram, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: PhoenixHologram.PubSub},
-      # Start a worker by calling: PhoenixHologram.Worker.start_link(arg)
-      # {PhoenixHologram.Worker, arg},
+      PhoenixHologram.FaceDetection.ModelServer,
       # Start to serve requests, typically the last entry
       PhoenixHologramWeb.Endpoint
     ]

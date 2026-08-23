@@ -18,6 +18,11 @@ defmodule PhoenixHologramWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    get "/premiere/videos/:id", VideoController, :show
+    get "/premiere/videos/:id/thumbnail", MovieThumbnailController, :show
+    get "/premiere/videos/:id/download", VideoController, :download
+    get "/premiere/videos/:id/download/:part", VideoController, :download_chunk
+    get "/admin/faces/:id/thumbnail", FaceThumbnailController, :show
   end
 
   # Other scopes may use custom stacks.

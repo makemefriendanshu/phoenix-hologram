@@ -70,7 +70,10 @@ defmodule PhoenixHologram.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:hologram, "~> 0.10.1"}
+      {:hologram, "~> 0.10.1"},
+      {:ecto_sql, "~> 3.14"},
+      {:ecto_sqlite3, "~> 0.15"},
+      {:evision, "~> 0.2"}
     ]
   end
 
@@ -90,6 +93,7 @@ defmodule PhoenixHologram.MixProject do
         "esbuild phoenix_hologram --minify",
         "phx.digest"
       ],
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
     ]
   end

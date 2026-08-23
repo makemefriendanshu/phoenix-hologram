@@ -43,3 +43,23 @@ npm-debug.log
 /Birthday/
 /Birthday foto/
 
+# Face detection: downloaded ONNX models + bundled ffmpeg binary
+# (fetched by `mix face_detection.setup`), plus SQLite db files.
+/priv/face_detection/models/
+/priv/face_detection/bin/
+*.db
+*.db-shm
+*.db-wal
+
+# Generated low-bitrate preview proxies (mix premiere.generate_previews).
+/priv/face_detection/previews/
+
+# Generated independently-playable download segments (VideoSegments).
+/priv/face_detection/movie_segments/
+
+# Generated face crop thumbnails, movie poster thumbnails, and cached
+# movie metadata.
+/priv/face_detection/thumbnails/
+/priv/face_detection/movie_thumbnails/
+/priv/face_detection/movie_metadata/
+

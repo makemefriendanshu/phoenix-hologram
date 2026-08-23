@@ -1,5 +1,9 @@
 import Config
 
+config :phoenix_hologram, PhoenixHologram.Repo,
+  database: Path.expand("../priv/face_detection/phoenix_hologram_test.db", __DIR__),
+  pool: Ecto.Adapters.SQL.Sandbox
+
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :phoenix_hologram, PhoenixHologramWeb.Endpoint,

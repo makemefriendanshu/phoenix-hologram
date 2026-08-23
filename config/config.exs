@@ -8,7 +8,10 @@
 import Config
 
 config :phoenix_hologram,
+  ecto_repos: [PhoenixHologram.Repo],
   generators: [timestamp_type: :utc_datetime]
+
+config :phoenix_hologram, PhoenixHologram.Repo, adapter: Ecto.Adapters.SQLite3
 
 # Configure the endpoint
 config :phoenix_hologram, PhoenixHologramWeb.Endpoint,
