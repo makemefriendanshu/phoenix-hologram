@@ -24,22 +24,37 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
 
   @bucket_ms 5 * 60 * 1000
 
-  def init(params, component, _server) do
+  def init(params, component, server) do
     movie_record = Repo.get(Movie, params.id)
     preloaded = movie_record && Repo.preload(movie_record, faces: :detections)
+    session_id = server.session_id
 
     focus_totals = if movie_record, do: FocusPoll.face_totals(movie_record.id), else: %{}
-    scene_votes = if movie_record, do: scene_vote_counts(movie_record.id), else: %{}
-    faces = if preloaded, do: Enum.map(preloaded.faces, &face_summary(&1, focus_totals)), else: []
-    scene_buckets = if preloaded, do: movie_scene_buckets(preloaded, scene_votes), else: []
+    votes_by_scene = if movie_record, do: scene_votes_by_key(movie_record.id), else: %{}
+    scenes_list = if preloaded, do: movie_scenes(preloaded, votes_by_scene, session_id), else: []
+    scenes_by_key = Map.new(scenes_list, &{scene_key(&1), &1})
+
+    faces =
+      if preloaded,
+        do: Enum.map(preloaded.faces, &face_summary(&1, focus_totals, scenes_list)),
+        else: []
+
     movie = movie_record && build_movie(movie_record)
 
-    component
-    |> put_state(:movie, movie)
-    |> put_state(:faces, faces)
-    |> put_state(:face_count, length(faces))
-    |> put_state(:scene_buckets, scene_buckets)
-    |> put_state(:scene_open, false)
+    component =
+      component
+      |> put_state(:movie, movie)
+      |> put_state(:session_id, session_id)
+      |> put_state(:faces, faces)
+      |> put_state(:face_count, length(faces))
+      |> put_state(:scenes, scenes_by_key)
+      |> put_state(:scene_buckets, scene_buckets(scenes_list))
+      |> put_state(:current_preview_scene, nil)
+      |> put_state(:scene_open, false)
+
+    server = if movie, do: put_subscription(server, {:focus_votes, movie.id}), else: server
+
+    {component, server}
   end
 
   def action(:show_scene, params, component) do
@@ -56,9 +71,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         else: "#{start_seconds}"
 
     src = "/premiere/videos/#{params.movie_id}#t=#{fragment}"
+    scene = find_scene_at(component.state.scenes, params.start_ms)
 
     component
     |> put_state(:scene_open, true)
+    |> put_state(:current_preview_scene, scene)
     |> put_action(
       name: :play_scene_video,
       params: %{src: src, duration_ms: duration_ms},
@@ -144,6 +161,109 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     put_state(component, :movie, %{component.state.movie | title: params.title})
   end
 
+  # A movie can have thousands of detections and hundreds of scenes (see
+  # SceneIndex.scenes/1), and this action runs on the client — rebuilding
+  # every derived structure (scene_buckets, every face's totals) from the
+  # full scene list on each vote made the client's interpreter visibly
+  # freeze for a moment on every click. Instead this only touches the one
+  # scene that changed and, for the voting face, the movie-wide total via
+  # an O(1) delta rather than a full re-sum — the one unavoidably broader
+  # pass (re-checking which of the face's own ranges are still voted) only
+  # runs when this vote removed the *last* vote for that face in that
+  # scene, since that's the only case where a range could stop overlapping
+  # any voted scene.
+  def action(:focus_vote_updated, params, component) do
+    my_session_id = component.state.session_id
+    is_mine = params.voter_session_id == my_session_id
+    key = scene_key(params.scene_start_ms, params.scene_end_ms)
+
+    old_scene = Map.fetch!(component.state.scenes, key)
+    old_votes_in_scene = old_scene.faces |> Enum.find(&(&1.id == params.face_id)) |> face_votes()
+    new_votes_in_scene = Map.get(params.counts, params.face_id, 0)
+
+    updated_faces =
+      Enum.map(old_scene.faces, fn face ->
+        votes = Map.get(params.counts, face.id, 0)
+
+        mine? =
+          if is_mine and face.id == params.face_id, do: params.voted?, else: face.mine?
+
+        %{face | votes: votes, mine?: mine?, voted: votes > 0}
+      end)
+
+    updated_scene = %{old_scene | faces: updated_faces, voted: Enum.any?(updated_faces, & &1.voted)}
+    scenes = Map.put(component.state.scenes, key, updated_scene)
+
+    current_preview_scene =
+      case component.state.current_preview_scene do
+        %{start_ms: s, end_ms: e} when s == params.scene_start_ms and e == params.scene_end_ms ->
+          updated_scene
+
+        other ->
+          other
+      end
+
+    faces =
+      update_face_focus(
+        component.state.faces,
+        scenes,
+        params.face_id,
+        params.scene_start_ms,
+        params.scene_end_ms,
+        old_votes_in_scene,
+        new_votes_in_scene
+      )
+
+    component
+    |> put_state(:scenes, scenes)
+    |> put_state(:current_preview_scene, current_preview_scene)
+    |> put_state(:scene_buckets, update_scene_bucket(component.state.scene_buckets, key, updated_scene))
+    |> put_state(:faces, faces)
+  end
+
+  defp face_votes(nil), do: 0
+  defp face_votes(face), do: face.votes
+
+  defp update_scene_bucket(scene_buckets, key, updated_scene) do
+    Enum.map(scene_buckets, fn bucket ->
+      if Enum.any?(bucket.scenes, &(scene_key(&1) == key)) do
+        scenes = Enum.map(bucket.scenes, &if(scene_key(&1) == key, do: updated_scene, else: &1))
+        %{bucket | scenes: scenes}
+      else
+        bucket
+      end
+    end)
+  end
+
+  defp update_face_focus(faces, scenes, face_id, scene_start_ms, scene_end_ms, old_votes, new_votes) do
+    became_voted? = old_votes == 0 and new_votes > 0
+    became_unvoted? = old_votes > 0 and new_votes == 0
+    delta = new_votes - old_votes
+
+    Enum.map(faces, fn face ->
+      if face.id == face_id do
+        ranges =
+          cond do
+            became_voted? ->
+              newly_voted = [{scene_start_ms, scene_end_ms}]
+              Enum.map(face.scenes, &if(overlaps_any?(&1, newly_voted), do: %{&1 | voted: true}, else: &1))
+
+            became_unvoted? ->
+              voted_intervals = voted_intervals(Map.values(scenes), face.id)
+              Enum.map(face.scenes, &%{&1 | voted: overlaps_any?(&1, voted_intervals)})
+
+            true ->
+              face.scenes
+          end
+
+        focus_votes = face.focus_votes + delta
+        %{face | scenes: ranges, focus_votes: focus_votes, voted: focus_votes > 0}
+      else
+        face
+      end
+    end)
+  end
+
   def command(:persist_label, params, server) do
     {:ok, _face} =
       FaceDetection.label_face(params.face_id, %{label: params.label, subtitle: params.subtitle})
@@ -164,36 +284,96 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     )
   end
 
+  def command(
+        :cast_focus_vote,
+        %{movie_id: movie_id, scene_start_ms: scene_start_ms, scene_end_ms: scene_end_ms, face_id: face_id},
+        server
+      ) do
+    {counts, voted?} =
+      FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
+
+    put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
+      scene_start_ms: scene_start_ms,
+      scene_end_ms: scene_end_ms,
+      counts: counts,
+      voter_session_id: server.session_id,
+      face_id: face_id,
+      voted?: voted?
+    )
+  end
+
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
 
-  defp scene_vote_counts(movie_id) do
-    movie_id
-    |> FocusPoll.all_votes()
-    |> Enum.group_by(fn vote -> {vote.scene_start_ms, vote.scene_end_ms, vote.face_id} end)
-    |> Map.new(fn {key, votes} -> {key, length(votes)} end)
+  # Matches the key the "Who's in focus?" panel looks scenes up by (see
+  # PlayerPage) — an O(1) Map lookup when a scene preview is opened or a
+  # focus-vote broadcast comes in, rather than a scan through every scene.
+  defp scene_key(%{start_ms: start_ms, end_ms: end_ms}), do: "#{start_ms}:#{end_ms}"
+  defp scene_key(start_ms, end_ms), do: "#{start_ms}:#{end_ms}"
+
+  # The "Scenes" grid's timestamps come straight from the "who's on screen
+  # together" scenes and match a scenes-map key exactly, but a face's own
+  # timestamp badges under "All recognised faces" come from that face's
+  # continuous-appearance ranges (SceneIndex.ranges/1) — a different
+  # segmentation that rarely shares boundaries with the former, so an exact
+  # key lookup misses and the voting panel silently doesn't appear. Since
+  # the "who's on screen together" scenes fully partition the timeline with
+  # no gaps, the last one starting at or before `ms` is always the scene
+  # actually playing at that instant, regardless of which grid it was
+  # clicked from.
+  defp find_scene_at(scenes, ms) do
+    scenes
+    |> Map.values()
+    |> Enum.filter(&(&1.start_ms <= ms))
+    |> Enum.max_by(& &1.start_ms, fn -> nil end)
   end
 
-  defp movie_scene_buckets(preloaded_movie, scene_votes) do
+  defp scene_votes_by_key(movie_id) do
+    movie_id
+    |> FocusPoll.all_votes()
+    |> Enum.group_by(&{&1.scene_start_ms, &1.scene_end_ms})
+  end
+
+  defp movie_scenes(preloaded_movie, votes_by_scene, session_id) do
     face_labels = Map.new(preloaded_movie.faces, fn face -> {face.id, face.label} end)
 
     preloaded_movie.faces
     |> Enum.flat_map(& &1.detections)
     |> SceneIndex.scenes()
     |> Enum.map(fn scene ->
+      scene_votes = Map.get(votes_by_scene, {scene.start_ms, scene.end_ms}, [])
+      counts = Enum.frequencies_by(scene_votes, & &1.face_id)
+
+      my_voted_faces =
+        scene_votes |> Enum.filter(&(&1.session_id == session_id)) |> MapSet.new(& &1.face_id)
+
+      faces =
+        Enum.map(scene.face_ids, fn face_id ->
+          votes = Map.get(counts, face_id, 0)
+
+          %{
+            id: face_id,
+            label: Map.get(face_labels, face_id) || "Face ##{face_id}",
+            votes: votes,
+            mine?: MapSet.member?(my_voted_faces, face_id),
+            voted: votes > 0
+          }
+        end)
+
       %{
         time: format_scene(scene),
         start_ms: scene.start_ms,
         end_ms: scene.end_ms,
-        faces:
-          Enum.map(scene.face_ids, fn face_id ->
-            votes = Map.get(scene_votes, {scene.start_ms, scene.end_ms, face_id}, 0)
-            label = Map.get(face_labels, face_id) || "Face ##{face_id}"
-            %{id: face_id, votes: votes, label: label}
-          end)
+        faces: faces,
+        voted: Enum.any?(faces, & &1.voted)
       }
     end)
+  end
+
+  defp scene_buckets(scenes_list) do
+    scenes_list
+    |> Enum.sort_by(& &1.start_ms)
     |> Enum.group_by(fn scene -> div(scene.start_ms, @bucket_ms) end)
     |> Enum.sort_by(fn {bucket_index, _scenes} -> bucket_index end)
     |> Enum.map(fn {bucket_index, scenes} ->
@@ -216,21 +396,48 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     }
   end
 
-  defp face_summary(face, focus_totals) do
+  defp face_summary(face, focus_totals, scenes_list) do
+    voted_intervals = voted_intervals(scenes_list, face.id)
+
     scenes =
       face.detections
       |> SceneIndex.ranges()
       |> Enum.map(fn range ->
-        %{time: format_scene(range), start_ms: range.start_ms, end_ms: range.end_ms}
+        %{
+          time: format_scene(range),
+          start_ms: range.start_ms,
+          end_ms: range.end_ms,
+          voted: overlaps_any?(range, voted_intervals)
+        }
       end)
+
+    focus_votes = Map.get(focus_totals, face.id, 0)
 
     %{
       id: face.id,
       label: face.label,
       subtitle: face.subtitle,
       scenes: scenes,
-      focus_votes: Map.get(focus_totals, face.id, 0)
+      focus_votes: focus_votes,
+      voted: focus_votes > 0
     }
+  end
+
+  # The scenes voted on (see FocusPoll) are segmented by who's on screen
+  # *together*, while a face's own timestamp ranges (SceneIndex.ranges/1)
+  # are segmented by that face's own continuous appearances — the two
+  # rarely share exact boundaries, so a range counts as voted whenever it
+  # overlaps any voted scene for this face.
+  defp voted_intervals(scenes_list, face_id) do
+    scenes_list
+    |> Enum.filter(fn scene -> Enum.any?(scene.faces, &(&1.id == face_id and &1.voted)) end)
+    |> Enum.map(&{&1.start_ms, &1.end_ms})
+  end
+
+  defp overlaps_any?(range, intervals) do
+    Enum.any?(intervals, fn {voted_start_ms, voted_end_ms} ->
+      range.start_ms <= voted_end_ms and voted_start_ms <= range.end_ms
+    end)
   end
 
   defp format_scene(%{start_ms: start_ms, end_ms: end_ms}) do
@@ -300,115 +507,204 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
               </div>
             </div>
           {%else}
-            <h2 class="text-xl font-semibold mb-3">Scenes</h2>
-            <p class="text-sm text-base-content/60 mb-3">
-              A new scene starts whenever who's on screen changes.
-            </p>
-            <div class="flex flex-col gap-2 mb-8">
-              {%for bucket <- @scene_buckets}
-                <details class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-box">
-                  <summary class="collapse-title font-medium">
-                    {bucket.label} — {bucket.scene_count} scene(s)
-                  </summary>
-                  <div class="collapse-content max-h-96 overflow-y-auto">
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {%for scene <- bucket.scenes}
-                        <div class="card bg-base-200 shadow-sm min-h-40">
-                          <div class="card-body items-center justify-center text-center p-3">
-                            <h3
+            <div class="flex flex-col lg:flex-row gap-8">
+              <div class="lg:w-1/2">
+                <h2 class="text-xl font-semibold mb-3">Scenes</h2>
+                <p class="text-sm text-base-content/60 mb-3">
+                  A new scene starts whenever who's on screen changes.
+                </p>
+                <div class="flex flex-col gap-2">
+                  {%for bucket <- @scene_buckets}
+                    <details class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-box">
+                      <summary class="collapse-title font-medium">
+                        {bucket.label} — {bucket.scene_count} scene(s)
+                      </summary>
+                      <div class="collapse-content max-h-96 overflow-y-auto">
+                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-3">
+                          {%for scene <- bucket.scenes}
+                            <div
                               $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
-                              class="card-title text-sm cursor-pointer hover:text-primary"
+                              class={
+                                if scene.voted do
+                                  "card bg-primary/10 border border-primary/40 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:border-primary"
+                                else
+                                  "card bg-base-200 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:bg-base-300"
+                                end
+                              }
                             >
-                              {scene.time}
-                            </h3>
-                            {%if scene.faces == []}
-                              <span class="text-xs text-base-content/60">no one recognised</span>
-                            {%else}
-                              <div class="flex flex-wrap gap-2 justify-center">
-                                {%for face <- scene.faces}
-                                  <div class="flex flex-col items-center gap-0.5">
-                                    <img
-                                      src={"/admin/faces/#{face.id}/thumbnail"}
-                                      title={face.label}
-                                      class="w-14 h-14 rounded-full object-cover ring ring-base-300"
-                                    />
-                                    <span class="text-xs text-base-content/60">👁 {face.votes}</span>
+                              <div class="card-body items-center justify-center text-center p-3">
+                                <h3 class="card-title text-sm">
+                                  {scene.time}
+                                </h3>
+                                {%if scene.faces == []}
+                                  <span class="text-xs text-base-content/60">no one recognised</span>
+                                {%else}
+                                  <div class="flex flex-wrap gap-2 justify-center">
+                                    {%for face <- scene.faces}
+                                      <div class="flex flex-col items-center gap-0.5">
+                                        <div class="relative">
+                                          <img
+                                            src={"/admin/faces/#{face.id}/thumbnail"}
+                                            title={face.label}
+                                            class={
+                                              if face.voted do
+                                                "w-14 h-14 rounded-full object-cover ring-2 ring-primary"
+                                              else
+                                                "w-14 h-14 rounded-full object-cover ring ring-base-300"
+                                              end
+                                            }
+                                          />
+                                          {%if face.voted}
+                                            <span class="absolute -top-1 -right-1 badge badge-primary badge-xs">✓</span>
+                                          {/if}
+                                        </div>
+                                        <span class="text-xs text-base-content/60">👁 {face.votes}</span>
+                                      </div>
+                                    {/for}
                                   </div>
-                                {/for}
+                                {/if}
                               </div>
-                            {/if}
-                          </div>
+                            </div>
+                          {/for}
                         </div>
-                      {/for}
-                    </div>
-                  </div>
-                </details>
-              {/for}
-            </div>
-
-            <h2 class="text-xl font-semibold mb-3">All recognised faces</h2>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[36rem] overflow-y-auto pr-1">
-              {%for face <- @faces}
-                <div class="card bg-base-100 shadow-xl">
-                  <figure class="px-4 pt-4">
-                    <img src={"/admin/faces/#{face.id}/thumbnail"} class="rounded-box w-full aspect-square object-cover" />
-                  </figure>
-                  <div class="card-body items-center text-center h-64">
-                    <h2 class="card-title text-base">{face.label || "Face ##{face.id}"}</h2>
-                    {%if face.subtitle}
-                      <p class="text-xs text-base-content/60 -mt-2">{face.subtitle}</p>
-                    {/if}
-                    <div class="badge badge-secondary badge-lg gap-1 text-base">
-                      <span class="text-lg leading-none">👁</span> {face.focus_votes} in focus
-                    </div>
-                    <div class="flex flex-wrap gap-1 justify-center overflow-y-auto w-full flex-1 min-h-0">
-                      {%for scene <- face.scenes}
-                        <span
-                          $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
-                          class="badge badge-outline cursor-pointer hover:badge-primary"
-                        >
-                          {scene.time}
-                        </span>
-                      {/for}
-                    </div>
-                    <details class="w-full text-left">
-                      <summary class="text-xs cursor-pointer text-base-content/60">Edit label</summary>
-                      <form $submit={:save_label, face_id: face.id} class="flex flex-col gap-1 mt-1">
-                        <input
-                          type="text"
-                          name="label"
-                          value={face.label || ""}
-                          placeholder="Name"
-                          class="input input-xs input-bordered w-full"
-                        />
-                        <input
-                          type="text"
-                          name="subtitle"
-                          value={face.subtitle || ""}
-                          placeholder="Subtitle"
-                          class="input input-xs input-bordered w-full"
-                        />
-                        <button type="submit" class="btn btn-xs btn-primary">Save</button>
-                      </form>
+                      </div>
                     </details>
-                  </div>
+                  {/for}
                 </div>
-              {/for}
+              </div>
+
+              <div class="lg:w-1/2">
+                <h2 class="text-xl font-semibold mb-3">All recognised faces</h2>
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4 max-h-[36rem] overflow-y-auto pr-1">
+                  {%for face <- @faces}
+                    <div class={
+                      if face.voted do
+                        "card bg-primary/10 border border-primary/40 shadow-xl"
+                      else
+                        "card bg-base-100 shadow-xl"
+                      end
+                    }>
+                      <figure class="px-4 pt-4">
+                        <img
+                          src={"/admin/faces/#{face.id}/thumbnail"}
+                          class={
+                            if face.voted do
+                              "rounded-box w-full aspect-square object-cover ring-2 ring-primary"
+                            else
+                              "rounded-box w-full aspect-square object-cover"
+                            end
+                          }
+                        />
+                      </figure>
+                      <div class="card-body items-center text-center min-h-64">
+                        <h2 class="card-title text-base flex-wrap justify-center">
+                          {face.label || "Face ##{face.id}"}
+                          {%if face.voted}
+                            <span class="badge badge-primary badge-xs align-middle">✓ voted</span>
+                          {/if}
+                        </h2>
+                        {%if face.subtitle}
+                          <p class="text-xs text-base-content/60 -mt-2">{face.subtitle}</p>
+                        {/if}
+                        <div class="badge badge-secondary badge-lg gap-1 text-base">
+                          <span class="text-lg leading-none">👁</span> {face.focus_votes} in focus
+                        </div>
+                        <div class="flex flex-wrap gap-1 justify-center w-full">
+                          {%for scene <- face.scenes}
+                            <span
+                              $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
+                              title={
+                                if scene.voted do
+                                  "Voted in focus"
+                                else
+                                  ""
+                                end
+                              }
+                              class={
+                                if scene.voted do
+                                  "badge badge-primary cursor-pointer"
+                                else
+                                  "badge badge-outline cursor-pointer hover:badge-primary"
+                                end
+                              }
+                            >
+                              {%if scene.voted}👁 {/if}{scene.time}
+                            </span>
+                          {/for}
+                        </div>
+                        <details class="w-full text-left">
+                          <summary class="text-xs cursor-pointer text-base-content/60">Edit label</summary>
+                          <form $submit={:save_label, face_id: face.id} class="flex flex-col gap-1 mt-1">
+                            <input
+                              type="text"
+                              name="label"
+                              value={face.label || ""}
+                              placeholder="Name"
+                              class="input input-xs input-bordered w-full"
+                            />
+                            <input
+                              type="text"
+                              name="subtitle"
+                              value={face.subtitle || ""}
+                              placeholder="Subtitle"
+                              class="input input-xs input-bordered w-full"
+                            />
+                            <button type="submit" class="btn btn-xs btn-primary">Save</button>
+                          </form>
+                        </details>
+                      </div>
+                    </div>
+                  {/for}
+                </div>
+              </div>
             </div>
           {/if}
 
           <div class={
             if @scene_open do
-              "fixed bottom-4 right-4 z-50 w-80 bg-base-100 rounded-box shadow-2xl p-3"
+              "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
             else
               "hidden"
             end
           }>
-            <div class="flex justify-between items-center mb-2">
-              <span class="text-sm font-medium">Scene preview (starts muted — unmute in the controls)</span>
-              <button $click="close_player" class="btn btn-xs btn-circle btn-ghost">✕</button>
+            <div
+              $click_outside="close_player"
+              class="bg-base-100 rounded-box shadow-2xl p-4 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+            >
+              <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium">Scene preview (starts muted — unmute in the controls)</span>
+                  {%if @current_preview_scene != nil}
+                    <span class="badge badge-outline whitespace-nowrap">{@current_preview_scene.time}</span>
+                  {/if}
+                </div>
+                <button $click="close_player" class="btn btn-xs btn-circle btn-ghost">✕</button>
+              </div>
+              <video id="scene-video" controls muted class="w-full aspect-video rounded"></video>
+
+              {%if @current_preview_scene != nil}
+                <div class="mt-4">
+                  <h3 class="text-sm font-semibold mb-2">Who's in focus?</h3>
+                  {%if @current_preview_scene.faces == []}
+                    <p class="text-sm text-base-content/60">No one recognised at this point in the scene.</p>
+                  {%else}
+                    <div class="flex flex-wrap gap-2">
+                      {%for face <- @current_preview_scene.faces}
+                        <button
+                          $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_preview_scene.start_ms, scene_end_ms: @current_preview_scene.end_ms, face_id: face.id}}
+                          class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
+                        >
+                          <img src={"/admin/faces/#{face.id}/thumbnail"} class="w-10 h-10 rounded-full object-cover shrink-0" />
+                          <span class="text-xs normal-case text-left leading-tight">
+                            {face.label}<br />{face.votes} vote(s)
+                          </span>
+                        </button>
+                      {/for}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             </div>
-            <video id="scene-video" controls muted class="w-full rounded"></video>
           </div>
         {/if}
       </div>
