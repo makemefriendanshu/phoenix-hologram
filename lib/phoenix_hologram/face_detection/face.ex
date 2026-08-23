@@ -4,6 +4,8 @@ defmodule PhoenixHologram.FaceDetection.Face do
 
   schema "faces" do
     field(:embedding, PhoenixHologram.FaceDetection.Embedding)
+    field(:label, :string)
+    field(:subtitle, :string)
 
     belongs_to(:movie, PhoenixHologram.FaceDetection.Movie)
     has_many(:detections, PhoenixHologram.FaceDetection.Detection)
@@ -15,5 +17,10 @@ defmodule PhoenixHologram.FaceDetection.Face do
     face
     |> cast(attrs, [:movie_id, :embedding])
     |> validate_required([:movie_id, :embedding])
+  end
+
+  @doc "Changeset for admin-assigned identity: a heading (label) and subheading (subtitle)."
+  def label_changeset(face, attrs) do
+    cast(face, attrs, [:label, :subtitle])
   end
 end
