@@ -36,7 +36,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
 
     faces =
       if preloaded,
-        do: Enum.map(preloaded.faces, &face_summary(&1, focus_totals, scenes_list)),
+        do:
+          preloaded.faces
+          |> Enum.map(&face_summary(&1, focus_totals, scenes_list))
+          |> Enum.sort_by(& &1.focus_votes, :desc),
         else: []
 
     movie = movie_record && build_movie(movie_record)
@@ -242,7 +245,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     became_unvoted? = old_votes > 0 and new_votes == 0
     delta = new_votes - old_votes
 
-    Enum.map(faces, fn face ->
+    faces
+    |> Enum.map(fn face ->
       if face.id == face_id do
         ranges =
           cond do
@@ -264,6 +268,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         face
       end
     end)
+    |> Enum.sort_by(& &1.focus_votes, :desc)
   end
 
   def command(:persist_label, params, server) do
