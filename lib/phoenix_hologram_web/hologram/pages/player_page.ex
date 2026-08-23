@@ -485,18 +485,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       {%for face <- @current_scene.faces}
                         <button
                           $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id}}
+                          title={Enum.join(face.voted_ats, "\n")}
                           class={if face.mine? do "btn btn-primary h-auto py-3 justify-start gap-3" else "btn btn-outline h-auto py-3 justify-start gap-3" end}
                         >
                           <img src={face.thumbnail_url} class="w-16 h-16 rounded-full object-cover shrink-0" />
                           <span class="text-base normal-case">
                             {face.votes} vote(s)
-                            {%if face.voted_ats != []}
-                              <span class="block text-sm text-base-content/60 mt-0.5">
-                                {%for voted_at <- face.voted_ats}
-                                  <span class="block">{voted_at}</span>
-                                {/for}
-                              </span>
-                            {/if}
                           </span>
                         </button>
                       {/for}

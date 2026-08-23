@@ -706,18 +706,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                       {%for face <- @current_preview_scene.faces}
                         <button
                           $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_preview_scene.start_ms, scene_end_ms: @current_preview_scene.end_ms, face_id: face.id}}
+                          title={Enum.join(face.voted_ats, "\n")}
                           class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                         >
                           <img src={"/admin/faces/#{face.id}/thumbnail"} class="w-10 h-10 rounded-full object-cover shrink-0" />
                           <span class="text-xs normal-case text-left leading-tight">
                             {face.label}<br />{face.votes} vote(s)
-                            {%if face.voted_ats != []}
-                              <span class="block text-base-content/60 mt-0.5">
-                                {%for voted_at <- face.voted_ats}
-                                  <span class="block">{voted_at}</span>
-                                {/for}
-                              </span>
-                            {/if}
                           </span>
                         </button>
                       {/for}
