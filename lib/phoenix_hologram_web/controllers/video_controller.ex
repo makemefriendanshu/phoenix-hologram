@@ -14,9 +14,9 @@ defmodule PhoenixHologramWeb.VideoController do
     ".m4v" => "video/x-m4v"
   }
 
-  def show(conn, %{"id" => id}) do
+  def show(conn, %{"id" => id} = params) do
     with %Movie{} = movie <- Repo.get(Movie, id),
-         path <- VideoPreview.resolve_path(movie),
+         path <- VideoPreview.resolve_quality(movie, params["quality"]),
          true <- File.regular?(path) do
       stream_video(conn, path)
     else
@@ -24,9 +24,9 @@ defmodule PhoenixHologramWeb.VideoController do
     end
   end
 
-  def download(conn, %{"id" => id}) do
+  def download(conn, %{"id" => id} = params) do
     with %Movie{} = movie <- Repo.get(Movie, id),
-         path <- VideoPreview.resolve_path(movie),
+         path <- VideoPreview.resolve_quality(movie, params["quality"]),
          true <- File.regular?(path) do
       conn
       |> put_attachment_header(download_filename(movie, path))
@@ -36,10 +36,11 @@ defmodule PhoenixHologramWeb.VideoController do
     end
   end
 
-  def download_chunk(conn, %{"id" => id, "part" => part_str}) do
+  def download_chunk(conn, %{"id" => id, "part" => part_str} = params) do
     with %Movie{} = movie <- Repo.get(Movie, id),
          {part, ""} <- Integer.parse(part_str),
-         segments <- VideoSegments.ensure_generated!(movie),
+         quality <- VideoPreview.normalize_quality(movie, params["quality"]),
+         segments <- VideoSegments.ensure_generated!(movie, quality),
          true <- part in 1..length(segments) do
       path = Enum.at(segments, part - 1)
 

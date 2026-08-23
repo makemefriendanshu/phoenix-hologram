@@ -1,5 +1,6 @@
 defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   use Hologram.Page
+  use Hologram.JS
 
   alias Hologram.UI.Link
   alias PhoenixHologram.Engagement
@@ -7,6 +8,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   alias PhoenixHologram.FocusPoll
   alias PhoenixHologram.Repo
   alias PhoenixHologram.VideoMetadata
+  alias PhoenixHologram.VideoPreview
   alias PhoenixHologram.VideoSegments
   alias PhoenixHologramWeb.Hologram.Pages.PremierePage
 
@@ -133,24 +135,44 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
   defp build_details(movie) do
     metadata = VideoMetadata.fetch(movie)
+    qualities = build_qualities(movie, metadata)
+    selected_quality = if VideoPreview.preview_ready?(movie), do: "preview", else: "source"
 
     %{
       id: movie.id,
       title: movie.title || movie.path,
       status: movie.status,
       description: VideoMetadata.describe(metadata),
-      video_url: "/premiere/videos/#{movie.id}",
+      video_url: video_url(movie.id, selected_quality),
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail",
-      download_url: "/premiere/videos/#{movie.id}/download",
-      segment_downloads: segment_downloads(movie)
+      download_url: download_url(movie.id, selected_quality),
+      segment_downloads: segment_downloads(movie, selected_quality),
+      qualities: qualities,
+      selected_quality: selected_quality
     }
   end
 
-  defp segment_downloads(movie) do
-    segment_count = movie |> VideoSegments.ensure_generated!() |> length()
+  defp build_qualities(movie, source_metadata) do
+    source = %{key: "source", label: "Original · " <> VideoMetadata.describe_quality(source_metadata)}
+
+    case VideoMetadata.fetch_preview(movie) do
+      nil ->
+        [source]
+
+      preview_metadata ->
+        [source, %{key: "preview", label: "Data saver · " <> VideoMetadata.describe_quality(preview_metadata)}]
+    end
+  end
+
+  defp video_url(movie_id, quality), do: "/premiere/videos/#{movie_id}?quality=#{quality}"
+
+  defp download_url(movie_id, quality), do: "/premiere/videos/#{movie_id}/download?quality=#{quality}"
+
+  defp segment_downloads(movie, quality) do
+    segment_count = movie |> VideoSegments.ensure_generated!(quality) |> length()
 
     Enum.map(1..segment_count, fn part ->
-      %{part: part, url: "/premiere/videos/#{movie.id}/download/#{part}"}
+      %{part: part, url: "/premiere/videos/#{movie.id}/download/#{part}?quality=#{quality}"}
     end)
   end
 
@@ -162,6 +184,52 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   def action(:scene_changed, params, component) do
     scene = Map.get(component.state.scenes, params.scene_key)
     put_state(component, :current_scene, scene)
+  end
+
+  # Swapping `src` via plain JS (rather than just re-rendering the `src`
+  # attribute from state) lets us capture the current playback position and
+  # play/paused state first and restore them once the new source has loaded,
+  # instead of the browser resetting to 0:00 on every quality change. The
+  # state update below keeps @movie.video_url/download_url in sync so a
+  # later unrelated re-render (e.g. posting a comment) doesn't stomp the
+  # JS-set src back to a stale value.
+  #
+  # The segmented "download in parts" links aren't updated here: unlike the
+  # full download link, they depend on that quality's segment count, which
+  # means running ffmpeg server-side if this quality hasn't been split into
+  # parts before — so that part is handed off to a command instead, and
+  # arrives a moment later via :segment_downloads_updated.
+  def action(:quality_changed, params, component) do
+    quality = params.event.value
+    movie_id = component.state.movie.id
+    new_video_url = video_url(movie_id, quality)
+    new_download_url = download_url(movie_id, quality)
+
+    JS.exec("""
+    const video = document.getElementById('player-video');
+    if (video) {
+      const time = video.currentTime;
+      const wasPlaying = !video.paused;
+      video.src = #{inspect(new_video_url)};
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = time;
+        if (wasPlaying) { video.play().catch(() => {}); }
+      }, { once: true });
+    }
+    """)
+
+    component
+    |> put_state(:movie, %{
+      component.state.movie
+      | video_url: new_video_url,
+        download_url: new_download_url,
+        selected_quality: quality
+    })
+    |> put_command(:switch_download_quality, movie_id: movie_id, quality: quality)
+  end
+
+  def action(:segment_downloads_updated, params, component) do
+    put_state(component, :movie, %{component.state.movie | segment_downloads: params.segment_downloads})
   end
 
   def action(:update_comment_body, params, component) do
@@ -241,6 +309,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     |> put_state(:current_scene, current_scene)
   end
 
+  def command(:switch_download_quality, %{movie_id: movie_id, quality: quality}, server) do
+    movie = Repo.get!(Movie, movie_id)
+    put_action(server, :segment_downloads_updated, segment_downloads: segment_downloads(movie, quality))
+  end
+
   def command(:like_movie, %{movie_id: movie_id}, server) do
     {status, count} = Engagement.toggle_movie_like(movie_id, server.session_id)
     put_action(server, :movie_like_toggled, count: count, liked?: status == :liked)
@@ -307,8 +380,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             <span class="badge badge-outline">{@movie.status}</span>
           </div>
 
-          <div class="flex flex-col lg:flex-row gap-4 lg:items-stretch">
-            <div class="flex-1 min-w-0">
+          <div class="relative flex flex-col lg:flex-row gap-4">
+            <div class="flex-1 min-w-0 lg:pr-[25rem]">
               <video
                 id="player-video"
                 data-scene-boundaries={@scene_boundaries_json}
@@ -318,6 +391,23 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 src={@movie.video_url}
               >
               </video>
+
+              {%if length(@movie.qualities) > 1}
+                <div class="flex items-center gap-2 mt-2">
+                  <label for="quality-select" class="text-xs text-base-content/60">Quality</label>
+                  <select
+                    id="quality-select"
+                    $change="quality_changed"
+                    value={@movie.selected_quality}
+                    class="select select-bordered select-xs w-auto"
+                  >
+                    {%for quality <- @movie.qualities}
+                      <option value={quality.key}>{quality.label}</option>
+                    {/for}
+                  </select>
+                </div>
+              {/if}
+
               <script>
                 {%raw}
                 (function () {
@@ -362,19 +452,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 })();
                 {/raw}
               </script>
-
-              <div class="mt-4 flex items-center gap-2">
-                <button
-                  $click={command: :like_movie, params: %{movie_id: @movie.id}}
-                  class={if @movie_liked? do "btn btn-sm btn-error" else "btn btn-sm btn-outline" end}
-                >
-                  {%if @movie_liked?}♥ Liked{%else}♥ Like{/if}
-                </button>
-                <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
-              </div>
             </div>
 
-            <div class="lg:w-96 shrink-0 flex flex-col">
+            <div class="flex flex-col lg:absolute lg:inset-y-0 lg:right-0 lg:w-96">
               <div class="card bg-base-100 shadow flex-1 flex flex-col min-h-0 overflow-hidden">
                 <div class="card-body py-4 flex-1 flex flex-col min-h-0">
                   <h2 class="text-lg font-semibold mb-1">Who's in focus?</h2>
@@ -402,8 +482,33 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             </div>
           </div>
 
+          <div class="mt-4 flex items-center gap-2">
+            <button
+              $click={command: :like_movie, params: %{movie_id: @movie.id}}
+              class={if @movie_liked? do "btn btn-sm btn-error" else "btn btn-sm btn-outline" end}
+            >
+              {%if @movie_liked?}♥ Liked{%else}♥ Like{/if}
+            </button>
+            <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
+          </div>
+
           <div class="mt-6">
             <h2 class="text-sm font-semibold mb-2">Download</h2>
+            {%if length(@movie.qualities) > 1}
+              <div class="flex items-center gap-2 mb-3">
+                <label for="download-quality-select" class="text-xs text-base-content/60">Quality</label>
+                <select
+                  id="download-quality-select"
+                  $change="quality_changed"
+                  value={@movie.selected_quality}
+                  class="select select-bordered select-xs w-auto"
+                >
+                  {%for quality <- @movie.qualities}
+                    <option value={quality.key}>{quality.label}</option>
+                  {/for}
+                </select>
+              </div>
+            {/if}
             <a href={@movie.download_url} download class="btn btn-sm btn-outline mb-2">
               Download full movie
             </a>
