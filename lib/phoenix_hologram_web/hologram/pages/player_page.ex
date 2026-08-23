@@ -93,7 +93,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     |> SceneIndex.scenes()
     |> Enum.map(fn scene ->
       scene_votes = Map.get(votes_by_scene, {scene.start_ms, scene.end_ms}, [])
-      counts = Enum.frequencies_by(scene_votes, & &1.face_id)
+      votes_by_face = Enum.group_by(scene_votes, & &1.face_id)
 
       my_voted_faces =
         scene_votes |> Enum.filter(&(&1.session_id == session_id)) |> MapSet.new(& &1.face_id)
@@ -104,11 +104,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         time: format_scene(scene),
         faces:
           Enum.map(scene.face_ids, fn face_id ->
+            face_votes = Map.get(votes_by_face, face_id, [])
+
             %{
               id: face_id,
               thumbnail_url: "/admin/faces/#{face_id}/thumbnail",
-              votes: Map.get(counts, face_id, 0),
-              mine?: MapSet.member?(my_voted_faces, face_id)
+              votes: length(face_votes),
+              mine?: MapSet.member?(my_voted_faces, face_id),
+              voted_ats: face_votes |> voted_ats() |> Enum.map(&format_timestamp/1)
             }
           end)
       }
@@ -130,6 +133,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     padded_seconds = seconds |> Integer.to_string() |> String.pad_leading(2, "0")
     "#{minutes}:#{padded_seconds}"
   end
+
+  defp voted_ats(votes), do: votes |> Enum.map(& &1.inserted_at) |> Enum.sort({:desc, NaiveDateTime})
+
+  defp format_timestamp(nil), do: nil
+  defp format_timestamp(%NaiveDateTime{} = dt), do: Calendar.strftime(dt, "%H:%M:%S UTC")
 
   defp build_details(nil), do: nil
 
@@ -291,11 +299,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         faces =
           Enum.map(scene.faces, fn face ->
             votes = Map.get(params.counts, face.id, 0)
+            voted_ats = params.voted_ats |> Map.get(face.id, []) |> Enum.map(&format_timestamp/1)
 
             mine? =
               if is_mine and face.id == params.face_id, do: params.voted?, else: face.mine?
 
-            %{face | votes: votes, mine?: mine?}
+            %{face | votes: votes, mine?: mine?, voted_ats: voted_ats}
           end)
 
         %{scene | faces: faces}
@@ -354,14 +363,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         %{movie_id: movie_id, scene_start_ms: scene_start_ms, scene_end_ms: scene_end_ms, face_id: face_id},
         server
       ) do
-    {counts, last_voted_ats, voted?} =
+    {counts, voted_ats, voted?} =
       FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
 
     put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
       scene_start_ms: scene_start_ms,
       scene_end_ms: scene_end_ms,
       counts: counts,
-      last_voted_ats: last_voted_ats,
+      voted_ats: voted_ats,
       voter_session_id: server.session_id,
       face_id: face_id,
       voted?: voted?
@@ -479,7 +488,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                           class={if face.mine? do "btn btn-primary h-auto py-3 justify-start gap-3" else "btn btn-outline h-auto py-3 justify-start gap-3" end}
                         >
                           <img src={face.thumbnail_url} class="w-16 h-16 rounded-full object-cover shrink-0" />
-                          <span class="text-base normal-case">{face.votes} vote(s)</span>
+                          <span class="text-base normal-case">
+                            {face.votes} vote(s)
+                            {%if face.voted_ats != []}
+                              <span class="block text-sm text-base-content/60 mt-0.5">
+                                {%for voted_at <- face.voted_ats}
+                                  <span class="block">{voted_at}</span>
+                                {/for}
+                              </span>
+                            {/if}
+                          </span>
                         </button>
                       {/for}
                     </div>

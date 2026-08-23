@@ -191,9 +191,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         mine? =
           if is_mine and face.id == params.face_id, do: params.voted?, else: face.mine?
 
-        last_voted_at = params.last_voted_ats |> Map.get(face.id) |> format_timestamp()
+        voted_ats = params.voted_ats |> Map.get(face.id, []) |> Enum.map(&format_timestamp/1)
 
-        %{face | votes: votes, mine?: mine?, voted: votes > 0, last_voted_at: last_voted_at}
+        %{face | votes: votes, mine?: mine?, voted: votes > 0, voted_ats: voted_ats}
       end)
 
     updated_scene = %{old_scene | faces: updated_faces, voted: Enum.any?(updated_faces, & &1.voted)}
@@ -296,14 +296,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         %{movie_id: movie_id, scene_start_ms: scene_start_ms, scene_end_ms: scene_end_ms, face_id: face_id},
         server
       ) do
-    {counts, last_voted_ats, voted?} =
+    {counts, voted_ats, voted?} =
       FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
 
     put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
       scene_start_ms: scene_start_ms,
       scene_end_ms: scene_end_ms,
       counts: counts,
-      last_voted_ats: last_voted_ats,
+      voted_ats: voted_ats,
       voter_session_id: server.session_id,
       face_id: face_id,
       voted?: voted?
@@ -366,7 +366,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
             votes: length(face_votes),
             mine?: MapSet.member?(my_voted_faces, face_id),
             voted: face_votes != [],
-            last_voted_at: face_votes |> last_voted_at() |> format_timestamp()
+            voted_ats: face_votes |> voted_ats() |> Enum.map(&format_timestamp/1)
           }
         end)
 
@@ -465,8 +465,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     "#{minutes}:#{padded_seconds}"
   end
 
-  defp last_voted_at([]), do: nil
-  defp last_voted_at(votes), do: votes |> Enum.map(& &1.inserted_at) |> Enum.max(NaiveDateTime)
+  defp voted_ats(votes), do: votes |> Enum.map(& &1.inserted_at) |> Enum.sort({:desc, NaiveDateTime})
 
   defp format_timestamp(nil), do: nil
   defp format_timestamp(%NaiveDateTime{} = dt), do: Calendar.strftime(dt, "%H:%M:%S UTC")
@@ -712,8 +711,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                           <img src={"/admin/faces/#{face.id}/thumbnail"} class="w-10 h-10 rounded-full object-cover shrink-0" />
                           <span class="text-xs normal-case text-left leading-tight">
                             {face.label}<br />{face.votes} vote(s)
-                            {%if face.last_voted_at != nil}
-                              <br /><span class="text-base-content/60">last {face.last_voted_at}</span>
+                            {%if face.voted_ats != []}
+                              <span class="block text-base-content/60 mt-0.5">
+                                {%for voted_at <- face.voted_ats}
+                                  <span class="block">{voted_at}</span>
+                                {/for}
+                              </span>
                             {/if}
                           </span>
                         </button>
