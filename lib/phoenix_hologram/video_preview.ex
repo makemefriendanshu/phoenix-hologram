@@ -21,6 +21,16 @@ defmodule PhoenixHologram.VideoPreview do
     movie |> preview_path() |> File.regular?()
   end
 
+  @doc "The path playback/downloads should use: the cached preview if ready, else the raw source."
+  @spec resolve_path(Movie.t()) :: String.t()
+  def resolve_path(movie) do
+    if preview_ready?(movie) do
+      preview_path(movie)
+    else
+      movie.path
+    end
+  end
+
   @doc """
   Transcodes the movie's source file into a cached 720p/#{@preview_bitrate} preview.
   Overwrites any existing preview. Returns the preview path.

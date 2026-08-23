@@ -4,6 +4,7 @@ defmodule PhoenixHologramWeb.VideoController do
   alias PhoenixHologram.FaceDetection.Movie
   alias PhoenixHologram.Repo
   alias PhoenixHologram.VideoPreview
+  alias PhoenixHologram.VideoSegments
 
   @content_types %{
     ".mp4" => "video/mp4",
@@ -15,7 +16,7 @@ defmodule PhoenixHologramWeb.VideoController do
 
   def show(conn, %{"id" => id}) do
     with %Movie{} = movie <- Repo.get(Movie, id),
-         path <- resolve_path(movie),
+         path <- VideoPreview.resolve_path(movie),
          true <- File.regular?(path) do
       stream_video(conn, path)
     else
@@ -23,28 +24,67 @@ defmodule PhoenixHologramWeb.VideoController do
     end
   end
 
-  defp resolve_path(movie) do
-    if VideoPreview.preview_ready?(movie) do
-      VideoPreview.preview_path(movie)
+  def download(conn, %{"id" => id}) do
+    with %Movie{} = movie <- Repo.get(Movie, id),
+         path <- VideoPreview.resolve_path(movie),
+         true <- File.regular?(path) do
+      conn
+      |> put_attachment_header(download_filename(movie, path))
+      |> stream_video(path)
     else
-      movie.path
+      _ -> send_resp(conn, 404, "Not found")
     end
+  end
+
+  def download_chunk(conn, %{"id" => id, "part" => part_str}) do
+    with %Movie{} = movie <- Repo.get(Movie, id),
+         {part, ""} <- Integer.parse(part_str),
+         segments <- VideoSegments.ensure_generated!(movie),
+         true <- part in 1..length(segments) do
+      path = Enum.at(segments, part - 1)
+
+      conn
+      |> put_resp_content_type(content_type_for(path), nil)
+      |> put_attachment_header(download_filename(movie, path, part, length(segments)))
+      |> send_file(200, path)
+    else
+      _ -> send_resp(conn, 404, "Not found")
+    end
+  end
+
+  defp download_filename(movie, path) do
+    "#{safe_title(movie)}#{Path.extname(path)}"
+  end
+
+  defp download_filename(movie, path, part, total) do
+    padded_part = part |> Integer.to_string() |> String.pad_leading(2, "0")
+    "#{safe_title(movie)}.part#{padded_part}-of-#{total}#{Path.extname(path)}"
+  end
+
+  defp safe_title(movie) do
+    (movie.title || "movie-#{movie.id}")
+    |> String.replace(~r/[^A-Za-z0-9_\-]+/, "_")
+  end
+
+  defp put_attachment_header(conn, filename) do
+    put_resp_header(conn, "content-disposition", ~s(attachment; filename="#{filename}"))
+  end
+
+  defp content_type_for(path) do
+    Map.get(
+      @content_types,
+      path |> Path.extname() |> String.downcase(),
+      "application/octet-stream"
+    )
   end
 
   defp stream_video(conn, path) do
     %{size: size} = File.stat!(path)
 
-    content_type =
-      Map.get(
-        @content_types,
-        path |> Path.extname() |> String.downcase(),
-        "application/octet-stream"
-      )
-
     conn =
       conn
       |> put_resp_header("accept-ranges", "bytes")
-      |> put_resp_content_type(content_type, nil)
+      |> put_resp_content_type(content_type_for(path), nil)
 
     case get_req_header(conn, "range") do
       ["bytes=" <> range] -> send_range(conn, path, size, range)
