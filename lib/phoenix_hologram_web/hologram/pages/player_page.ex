@@ -143,7 +143,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       id: movie.id,
       title: movie.title || movie.path,
       status: movie.status,
-      description: VideoMetadata.describe(metadata),
+      description: VideoMetadata.format_duration(metadata.duration_ms),
       video_url: video_url(movie.id, selected_quality),
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail",
       download_url: download_url(movie.id, selected_quality),
