@@ -153,6 +153,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   end
 
   def action(:label_saved, params, component) do
+    JS.exec("""
+    const details = document.getElementById('label-details-#{params.face_id}');
+    if (details) { details.open = false; }
+    """)
+
     faces =
       Enum.map(component.state.faces, fn face ->
         if face.id == params.face_id do
@@ -171,6 +176,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   end
 
   def action(:movie_title_saved, params, component) do
+    JS.exec("""
+    const details = document.getElementById('rename-movie-details');
+    if (details) { details.open = false; }
+    """)
+
     put_state(component, :movie, %{component.state.movie | title: params.title})
   end
 
@@ -566,7 +576,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
               <Link to={PlayerPage, id: @movie.id} class="btn btn-primary btn-sm">
                 Watch in Premiere Hall
               </Link>
-              <details class="mt-2">
+              <details id="rename-movie-details" class="mt-2">
                 <summary class="text-xs cursor-pointer text-base-content/60">Rename movie</summary>
                 <form
                   method="post"
@@ -732,7 +742,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                             </span>
                           {/for}
                         </div>
-                        <details class="w-full text-left">
+                        <details id={"label-details-#{face.id}"} class="w-full text-left">
                           <summary class="text-xs cursor-pointer text-base-content/60">Edit label</summary>
                           <form
                             method="post"
