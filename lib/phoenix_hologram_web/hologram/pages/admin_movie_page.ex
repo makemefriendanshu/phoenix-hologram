@@ -670,13 +670,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
             </div>
           {/if}
 
-          <div class={
-            if @scene_open do
-              "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-            else
-              "hidden"
-            end
-          }>
+          {%if @scene_open}
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div
               $click_outside="close_player"
               class="bg-base-100 rounded-box shadow-2xl p-4 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
@@ -719,6 +714,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
               {/if}
             </div>
           </div>
+          {/if}
         {/if}
       </div>
     </div>
