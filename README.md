@@ -18,13 +18,30 @@ Elixir/Phoenix, Hologram, SQLite via Ecto (Postgres isn't available on every dev
 ## Run
 
 ```bash
-mix setup
-mix phx.server
+mix setup       # one-time: deps, JS/CSS toolchain, asset build
+mix phx.server  # start the app at localhost:4000
 ```
 
+Face detection needs its own one-time asset download (models + `ffmpeg`) before you can ingest a movie:
+
+```bash
+mix face_detection.setup             # downloads YuNet/SFace models and ffmpeg into priv/face_detection/
+mix face_detection.ingest PATH       # ingest a movie: detect, cluster, and persist faces
+mix face_detection.ingest PATH --title "Reception"
+```
+
+Other mix tasks:
+
+```bash
+mix test                       # ecto.create + ecto.migrate + test
+mix precommit                  # compile --warnings-as-errors, deps.unlock --unused, format, test
+mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps preview proxies for movies that lack one, for bandwidth-constrained playback
+```
+
+### Pages
+
 - `/` — stock Phoenix page.
-- `/hologram` — Hologram demo page. Off by default in `:dev`/`:test` (set `HOLOGRAM_START=1` or run `mix holo`); always on in `:prod`.
-- `mix face_detection.setup` then `mix face_detection.ingest PATH` — one-time model download, then ingest a movie.
+- `/hologram` — Hologram demo page.
 - `/admin`, `/admin/movies/:id` — per-movie scene timeline and recognised faces (nameable, with thumbnails and timestamp ranges).
 - `/premiere`, `/premiere/:id` — plays a movie with live "who's in focus" voting (multiple faces per scene), comments (replies + likes), a like button, and a quality selector (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown). Over the ngrok tunnel, large videos are bandwidth-capped (free tier), so playback can stall on multi-GB files — fine on localhost.
 
