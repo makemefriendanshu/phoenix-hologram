@@ -507,150 +507,156 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
               </div>
             </div>
           {%else}
-            <h2 class="text-xl font-semibold mb-3">Scenes</h2>
-            <p class="text-sm text-base-content/60 mb-3">
-              A new scene starts whenever who's on screen changes.
-            </p>
-            <div class="flex flex-col gap-2 mb-8">
-              {%for bucket <- @scene_buckets}
-                <details class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-box">
-                  <summary class="collapse-title font-medium">
-                    {bucket.label} — {bucket.scene_count} scene(s)
-                  </summary>
-                  <div class="collapse-content max-h-96 overflow-y-auto">
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {%for scene <- bucket.scenes}
-                        <div
-                          $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
-                          class={
-                            if scene.voted do
-                              "card bg-primary/10 border border-primary/40 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:border-primary"
-                            else
-                              "card bg-base-200 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:bg-base-300"
-                            end
-                          }
-                        >
-                          <div class="card-body items-center justify-center text-center p-3">
-                            <h3 class="card-title text-sm">
-                              {scene.time}
-                            </h3>
-                            {%if scene.faces == []}
-                              <span class="text-xs text-base-content/60">no one recognised</span>
-                            {%else}
-                              <div class="flex flex-wrap gap-2 justify-center">
-                                {%for face <- scene.faces}
-                                  <div class="flex flex-col items-center gap-0.5">
-                                    <div class="relative">
-                                      <img
-                                        src={"/admin/faces/#{face.id}/thumbnail"}
-                                        title={face.label}
-                                        class={
-                                          if face.voted do
-                                            "w-14 h-14 rounded-full object-cover ring-2 ring-primary"
-                                          else
-                                            "w-14 h-14 rounded-full object-cover ring ring-base-300"
-                                          end
-                                        }
-                                      />
-                                      {%if face.voted}
-                                        <span class="absolute -top-1 -right-1 badge badge-primary badge-xs">✓</span>
-                                      {/if}
-                                    </div>
-                                    <span class="text-xs text-base-content/60">👁 {face.votes}</span>
+            <div class="flex flex-col lg:flex-row gap-8">
+              <div class="lg:w-1/2">
+                <h2 class="text-xl font-semibold mb-3">Scenes</h2>
+                <p class="text-sm text-base-content/60 mb-3">
+                  A new scene starts whenever who's on screen changes.
+                </p>
+                <div class="flex flex-col gap-2">
+                  {%for bucket <- @scene_buckets}
+                    <details class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-box">
+                      <summary class="collapse-title font-medium">
+                        {bucket.label} — {bucket.scene_count} scene(s)
+                      </summary>
+                      <div class="collapse-content max-h-96 overflow-y-auto">
+                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-3">
+                          {%for scene <- bucket.scenes}
+                            <div
+                              $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
+                              class={
+                                if scene.voted do
+                                  "card bg-primary/10 border border-primary/40 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:border-primary"
+                                else
+                                  "card bg-base-200 shadow-sm min-h-40 cursor-pointer transition hover:shadow-md hover:bg-base-300"
+                                end
+                              }
+                            >
+                              <div class="card-body items-center justify-center text-center p-3">
+                                <h3 class="card-title text-sm">
+                                  {scene.time}
+                                </h3>
+                                {%if scene.faces == []}
+                                  <span class="text-xs text-base-content/60">no one recognised</span>
+                                {%else}
+                                  <div class="flex flex-wrap gap-2 justify-center">
+                                    {%for face <- scene.faces}
+                                      <div class="flex flex-col items-center gap-0.5">
+                                        <div class="relative">
+                                          <img
+                                            src={"/admin/faces/#{face.id}/thumbnail"}
+                                            title={face.label}
+                                            class={
+                                              if face.voted do
+                                                "w-14 h-14 rounded-full object-cover ring-2 ring-primary"
+                                              else
+                                                "w-14 h-14 rounded-full object-cover ring ring-base-300"
+                                              end
+                                            }
+                                          />
+                                          {%if face.voted}
+                                            <span class="absolute -top-1 -right-1 badge badge-primary badge-xs">✓</span>
+                                          {/if}
+                                        </div>
+                                        <span class="text-xs text-base-content/60">👁 {face.votes}</span>
+                                      </div>
+                                    {/for}
                                   </div>
-                                {/for}
+                                {/if}
                               </div>
-                            {/if}
-                          </div>
+                            </div>
+                          {/for}
                         </div>
-                      {/for}
-                    </div>
-                  </div>
-                </details>
-              {/for}
-            </div>
-
-            <h2 class="text-xl font-semibold mb-3">All recognised faces</h2>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[36rem] overflow-y-auto pr-1">
-              {%for face <- @faces}
-                <div class={
-                  if face.voted do
-                    "card bg-primary/10 border border-primary/40 shadow-xl"
-                  else
-                    "card bg-base-100 shadow-xl"
-                  end
-                }>
-                  <figure class="px-4 pt-4">
-                    <img
-                      src={"/admin/faces/#{face.id}/thumbnail"}
-                      class={
-                        if face.voted do
-                          "rounded-box w-full aspect-square object-cover ring-2 ring-primary"
-                        else
-                          "rounded-box w-full aspect-square object-cover"
-                        end
-                      }
-                    />
-                  </figure>
-                  <div class="card-body items-center text-center h-64">
-                    <h2 class="card-title text-base">
-                      {face.label || "Face ##{face.id}"}
-                      {%if face.voted}
-                        <span class="badge badge-primary badge-xs align-middle">✓ voted</span>
-                      {/if}
-                    </h2>
-                    {%if face.subtitle}
-                      <p class="text-xs text-base-content/60 -mt-2">{face.subtitle}</p>
-                    {/if}
-                    <div class="badge badge-secondary badge-lg gap-1 text-base">
-                      <span class="text-lg leading-none">👁</span> {face.focus_votes} in focus
-                    </div>
-                    <div class="flex flex-wrap gap-1 justify-center overflow-y-auto w-full flex-1 min-h-0">
-                      {%for scene <- face.scenes}
-                        <span
-                          $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
-                          title={
-                            if scene.voted do
-                              "Voted in focus"
-                            else
-                              ""
-                            end
-                          }
-                          class={
-                            if scene.voted do
-                              "badge badge-primary cursor-pointer"
-                            else
-                              "badge badge-outline cursor-pointer hover:badge-primary"
-                            end
-                          }
-                        >
-                          {%if scene.voted}👁 {/if}{scene.time}
-                        </span>
-                      {/for}
-                    </div>
-                    <details class="w-full text-left">
-                      <summary class="text-xs cursor-pointer text-base-content/60">Edit label</summary>
-                      <form $submit={:save_label, face_id: face.id} class="flex flex-col gap-1 mt-1">
-                        <input
-                          type="text"
-                          name="label"
-                          value={face.label || ""}
-                          placeholder="Name"
-                          class="input input-xs input-bordered w-full"
-                        />
-                        <input
-                          type="text"
-                          name="subtitle"
-                          value={face.subtitle || ""}
-                          placeholder="Subtitle"
-                          class="input input-xs input-bordered w-full"
-                        />
-                        <button type="submit" class="btn btn-xs btn-primary">Save</button>
-                      </form>
+                      </div>
                     </details>
-                  </div>
+                  {/for}
                 </div>
-              {/for}
+              </div>
+
+              <div class="lg:w-1/2">
+                <h2 class="text-xl font-semibold mb-3">All recognised faces</h2>
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4 max-h-[36rem] overflow-y-auto pr-1">
+                  {%for face <- @faces}
+                    <div class={
+                      if face.voted do
+                        "card bg-primary/10 border border-primary/40 shadow-xl"
+                      else
+                        "card bg-base-100 shadow-xl"
+                      end
+                    }>
+                      <figure class="px-4 pt-4">
+                        <img
+                          src={"/admin/faces/#{face.id}/thumbnail"}
+                          class={
+                            if face.voted do
+                              "rounded-box w-full aspect-square object-cover ring-2 ring-primary"
+                            else
+                              "rounded-box w-full aspect-square object-cover"
+                            end
+                          }
+                        />
+                      </figure>
+                      <div class="card-body items-center text-center min-h-64">
+                        <h2 class="card-title text-base flex-wrap justify-center">
+                          {face.label || "Face ##{face.id}"}
+                          {%if face.voted}
+                            <span class="badge badge-primary badge-xs align-middle">✓ voted</span>
+                          {/if}
+                        </h2>
+                        {%if face.subtitle}
+                          <p class="text-xs text-base-content/60 -mt-2">{face.subtitle}</p>
+                        {/if}
+                        <div class="badge badge-secondary badge-lg gap-1 text-base">
+                          <span class="text-lg leading-none">👁</span> {face.focus_votes} in focus
+                        </div>
+                        <div class="flex flex-wrap gap-1 justify-center w-full">
+                          {%for scene <- face.scenes}
+                            <span
+                              $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
+                              title={
+                                if scene.voted do
+                                  "Voted in focus"
+                                else
+                                  ""
+                                end
+                              }
+                              class={
+                                if scene.voted do
+                                  "badge badge-primary cursor-pointer"
+                                else
+                                  "badge badge-outline cursor-pointer hover:badge-primary"
+                                end
+                              }
+                            >
+                              {%if scene.voted}👁 {/if}{scene.time}
+                            </span>
+                          {/for}
+                        </div>
+                        <details class="w-full text-left">
+                          <summary class="text-xs cursor-pointer text-base-content/60">Edit label</summary>
+                          <form $submit={:save_label, face_id: face.id} class="flex flex-col gap-1 mt-1">
+                            <input
+                              type="text"
+                              name="label"
+                              value={face.label || ""}
+                              placeholder="Name"
+                              class="input input-xs input-bordered w-full"
+                            />
+                            <input
+                              type="text"
+                              name="subtitle"
+                              value={face.subtitle || ""}
+                              placeholder="Subtitle"
+                              class="input input-xs input-bordered w-full"
+                            />
+                            <button type="submit" class="btn btn-xs btn-primary">Save</button>
+                          </form>
+                        </details>
+                      </div>
+                    </div>
+                  {/for}
+                </div>
+              </div>
             </div>
           {/if}
 
