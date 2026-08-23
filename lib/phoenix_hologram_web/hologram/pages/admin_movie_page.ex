@@ -61,28 +61,33 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     {component, server}
   end
 
+  # find_scene_at/2 below is an O(total_scenes) scan — fine server-side
+  # (see :show_scene the command, below) but a movie with a couple thousand
+  # scenes (long movies sampled at ~1fps) blew the JS call stack when this
+  # ran as a client-side action, since Hologram's client Enum isn't
+  # tail-call-optimized. Same class of problem the comments on
+  # update_face_focus/5 and update_scene_bucket/3 already call out and
+  # avoid — this one spot was missed. So this action only opens the modal
+  # and hands the actual lookup to a command; :scene_shown (below) fills
+  # in the scene once that resolves.
   def action(:show_scene, params, component) do
-    start_seconds = div(params.start_ms, 1000)
-    end_seconds = div(params.end_ms, 1000)
-    duration_ms = params.end_ms - params.start_ms
-
-    # Media fragment start,end asks the browser itself to stop at the end
-    # (native support varies), and :play_scene_video's own JS-side timer
-    # enforces it explicitly regardless — belt and suspenders.
-    fragment =
-      if end_seconds > start_seconds,
-        do: "#{start_seconds},#{end_seconds}",
-        else: "#{start_seconds}"
-
-    src = "/premiere/videos/#{params.movie_id}#t=#{fragment}"
-    scene = find_scene_at(component.state.scenes, params.start_ms)
-
     component
     |> put_state(:scene_open, true)
-    |> put_state(:current_preview_scene, scene)
+    |> put_state(:current_preview_scene, nil)
+    |> put_command(:show_scene,
+      movie_id: params.movie_id,
+      start_ms: params.start_ms,
+      end_ms: params.end_ms,
+      focus_session_id: component.state.focus_session_id
+    )
+  end
+
+  def action(:scene_shown, params, component) do
+    component
+    |> put_state(:current_preview_scene, params.scene)
     |> put_action(
       name: :play_scene_video,
-      params: %{src: src, duration_ms: duration_ms},
+      params: %{src: params.src, duration_ms: params.duration_ms},
       delay: 0
     )
   end
@@ -328,6 +333,33 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         true -> closest
       end
     end)
+  end
+
+  # The heavy end of :show_scene (see the action above): rebuilds the same
+  # scenes list init/3 computes and runs find_scene_at/2 against it, but
+  # here on the server — real BEAM recursion, not Hologram's client
+  # interpreter, so a movie with thousands of scenes doesn't blow the stack.
+  def command(:show_scene, params, server) do
+    start_seconds = div(params.start_ms, 1000)
+    end_seconds = div(params.end_ms, 1000)
+    duration_ms = params.end_ms - params.start_ms
+
+    # Media fragment start,end asks the browser itself to stop at the end
+    # (native support varies), and :play_scene_video's own JS-side timer
+    # enforces it explicitly regardless — belt and suspenders.
+    fragment =
+      if end_seconds > start_seconds,
+        do: "#{start_seconds},#{end_seconds}",
+        else: "#{start_seconds}"
+
+    src = "/premiere/videos/#{params.movie_id}#t=#{fragment}"
+
+    preloaded = Movie |> Repo.get!(params.movie_id) |> Repo.preload(faces: :detections)
+    votes_by_scene = scene_votes_by_key(params.movie_id)
+    scenes_list = movie_scenes(preloaded, votes_by_scene, params.focus_session_id)
+    scene = find_scene_at(scenes_list, params.start_ms)
+
+    put_action(server, :scene_shown, scene: scene, src: src, duration_ms: duration_ms)
   end
 
   def command(:persist_label, params, server) do
