@@ -354,13 +354,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         %{movie_id: movie_id, scene_start_ms: scene_start_ms, scene_end_ms: scene_end_ms, face_id: face_id},
         server
       ) do
-    {counts, voted?} =
+    {counts, last_voted_ats, voted?} =
       FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
 
     put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
       scene_start_ms: scene_start_ms,
       scene_end_ms: scene_end_ms,
       counts: counts,
+      last_voted_ats: last_voted_ats,
       voter_session_id: server.session_id,
       face_id: face_id,
       voted?: voted?

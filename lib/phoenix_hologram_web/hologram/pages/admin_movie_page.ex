@@ -188,7 +188,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         mine? =
           if is_mine and face.id == params.face_id, do: params.voted?, else: face.mine?
 
-        %{face | votes: votes, mine?: mine?, voted: votes > 0}
+        last_voted_at = params.last_voted_ats |> Map.get(face.id) |> format_timestamp()
+
+        %{face | votes: votes, mine?: mine?, voted: votes > 0, last_voted_at: last_voted_at}
       end)
 
     updated_scene = %{old_scene | faces: updated_faces, voted: Enum.any?(updated_faces, & &1.voted)}
@@ -289,13 +291,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
         %{movie_id: movie_id, scene_start_ms: scene_start_ms, scene_end_ms: scene_end_ms, face_id: face_id},
         server
       ) do
-    {counts, voted?} =
+    {counts, last_voted_ats, voted?} =
       FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
 
     put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
       scene_start_ms: scene_start_ms,
       scene_end_ms: scene_end_ms,
       counts: counts,
+      last_voted_ats: last_voted_ats,
       voter_session_id: server.session_id,
       face_id: face_id,
       voted?: voted?
@@ -343,21 +346,22 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     |> SceneIndex.scenes()
     |> Enum.map(fn scene ->
       scene_votes = Map.get(votes_by_scene, {scene.start_ms, scene.end_ms}, [])
-      counts = Enum.frequencies_by(scene_votes, & &1.face_id)
+      votes_by_face = Enum.group_by(scene_votes, & &1.face_id)
 
       my_voted_faces =
         scene_votes |> Enum.filter(&(&1.session_id == session_id)) |> MapSet.new(& &1.face_id)
 
       faces =
         Enum.map(scene.face_ids, fn face_id ->
-          votes = Map.get(counts, face_id, 0)
+          face_votes = Map.get(votes_by_face, face_id, [])
 
           %{
             id: face_id,
             label: Map.get(face_labels, face_id) || "Face ##{face_id}",
-            votes: votes,
+            votes: length(face_votes),
             mine?: MapSet.member?(my_voted_faces, face_id),
-            voted: votes > 0
+            voted: face_votes != [],
+            last_voted_at: face_votes |> last_voted_at() |> format_timestamp()
           }
         end)
 
@@ -455,6 +459,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     padded_seconds = seconds |> Integer.to_string() |> String.pad_leading(2, "0")
     "#{minutes}:#{padded_seconds}"
   end
+
+  defp last_voted_at([]), do: nil
+  defp last_voted_at(votes), do: votes |> Enum.map(& &1.inserted_at) |> Enum.max(NaiveDateTime)
+
+  defp format_timestamp(nil), do: nil
+  defp format_timestamp(%NaiveDateTime{} = dt), do: Calendar.strftime(dt, "%H:%M:%S UTC")
 
   def template do
     ~HOLO"""
@@ -697,6 +707,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                           <img src={"/admin/faces/#{face.id}/thumbnail"} class="w-10 h-10 rounded-full object-cover shrink-0" />
                           <span class="text-xs normal-case text-left leading-tight">
                             {face.label}<br />{face.votes} vote(s)
+                            {%if face.last_voted_at != nil}
+                              <br /><span class="text-base-content/60">last {face.last_voted_at}</span>
+                            {/if}
                           </span>
                         </button>
                       {/for}

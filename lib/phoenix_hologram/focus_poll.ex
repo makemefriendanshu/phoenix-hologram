@@ -14,10 +14,11 @@ defmodule PhoenixHologram.FocusPoll do
 
   @doc """
   Toggles this session's vote for one face within a scene: casts it if not
-  already voted, retracts it if it was. Returns `{updated_counts, voted?}`.
+  already voted, retracts it if it was. Returns
+  `{updated_counts, updated_last_voted_ats, voted?}`.
   """
   @spec toggle_vote(integer, integer, integer, integer, String.t()) ::
-          {%{integer => non_neg_integer}, boolean}
+          {%{integer => non_neg_integer}, %{integer => NaiveDateTime.t()}, boolean}
   def toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, session_id) do
     attrs = %{
       movie_id: movie_id,
@@ -38,7 +39,8 @@ defmodule PhoenixHologram.FocusPoll do
           false
       end
 
-    {scene_counts(movie_id, scene_start_ms, scene_end_ms), voted?}
+    {scene_counts(movie_id, scene_start_ms, scene_end_ms),
+     scene_last_voted_ats(movie_id, scene_start_ms, scene_end_ms), voted?}
   end
 
   @doc "Returns {face_id => vote count} for one scene."
@@ -48,6 +50,17 @@ defmodule PhoenixHologram.FocusPoll do
     |> where(movie_id: ^movie_id, scene_start_ms: ^scene_start_ms, scene_end_ms: ^scene_end_ms)
     |> group_by([v], v.face_id)
     |> select([v], {v.face_id, count(v.id)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc "Returns {face_id => most recent vote timestamp} for one scene."
+  @spec scene_last_voted_ats(integer, integer, integer) :: %{integer => NaiveDateTime.t()}
+  def scene_last_voted_ats(movie_id, scene_start_ms, scene_end_ms) do
+    Vote
+    |> where(movie_id: ^movie_id, scene_start_ms: ^scene_start_ms, scene_end_ms: ^scene_end_ms)
+    |> group_by([v], v.face_id)
+    |> select([v], {v.face_id, max(v.inserted_at)})
     |> Repo.all()
     |> Map.new()
   end
@@ -65,7 +78,8 @@ defmodule PhoenixHologram.FocusPoll do
       scene_start_ms: v.scene_start_ms,
       scene_end_ms: v.scene_end_ms,
       face_id: v.face_id,
-      session_id: v.session_id
+      session_id: v.session_id,
+      inserted_at: v.inserted_at
     })
     |> Repo.all()
   end
