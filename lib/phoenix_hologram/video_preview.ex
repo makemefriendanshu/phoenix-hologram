@@ -21,13 +21,25 @@ defmodule PhoenixHologram.VideoPreview do
     movie |> preview_path() |> File.regular?()
   end
 
-  @doc "The path playback/downloads should use: the cached preview if ready, else the raw source."
-  @spec resolve_path(Movie.t()) :: String.t()
-  def resolve_path(movie) do
-    if preview_ready?(movie) do
-      preview_path(movie)
-    else
-      movie.path
+  @doc """
+  Normalizes a quality picker's raw selection ("source" or "preview") to the
+  quality that will actually be used: "preview" only ever comes back when a
+  preview has been generated, falling back to "source" otherwise (covers
+  `nil`/unrecognized values too, e.g. no explicit choice made yet).
+  """
+  @spec normalize_quality(Movie.t(), String.t() | nil) :: String.t()
+  def normalize_quality(_movie, "source"), do: "source"
+
+  def normalize_quality(movie, _quality) do
+    if preview_ready?(movie), do: "preview", else: "source"
+  end
+
+  @doc "Resolves a quality picker's raw selection to the file path it maps to."
+  @spec resolve_quality(Movie.t(), String.t() | nil) :: String.t()
+  def resolve_quality(movie, quality) do
+    case normalize_quality(movie, quality) do
+      "source" -> movie.path
+      "preview" -> preview_path(movie)
     end
   end
 

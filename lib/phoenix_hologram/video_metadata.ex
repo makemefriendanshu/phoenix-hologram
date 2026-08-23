@@ -6,6 +6,7 @@ defmodule PhoenixHologram.VideoMetadata do
   """
 
   alias PhoenixHologram.FaceDetection.{FrameExtractor, Movie}
+  alias PhoenixHologram.VideoPreview
 
   @type t :: %{
           duration_ms: non_neg_integer | nil,
@@ -14,12 +15,20 @@ defmodule PhoenixHologram.VideoMetadata do
           size_bytes: non_neg_integer
         }
 
-  @doc "Returns cached metadata for this movie, probing and caching it on first call."
+  @doc "Returns cached metadata for this movie's source file, probing and caching it on first call."
   @spec fetch(Movie.t()) :: t()
   def fetch(movie) do
-    case File.read(cache_path(movie)) do
-      {:ok, json} -> decode(json)
-      {:error, _} -> probe_and_cache(movie)
+    fetch_path(movie.path, cache_path(movie))
+  end
+
+  @doc """
+  Returns cached metadata for this movie's lower-bitrate preview proxy, or
+  `nil` if no preview has been generated for it yet.
+  """
+  @spec fetch_preview(Movie.t()) :: t() | nil
+  def fetch_preview(movie) do
+    if VideoPreview.preview_ready?(movie) do
+      fetch_path(VideoPreview.preview_path(movie), preview_cache_path(movie))
     end
   end
 
@@ -27,6 +36,14 @@ defmodule PhoenixHologram.VideoMetadata do
   @spec describe(t()) :: String.t()
   def describe(metadata) do
     [format_duration(metadata.duration_ms), format_resolution(metadata), format_size(metadata.size_bytes)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
+  end
+
+  @doc "One-line resolution/size summary, e.g. \"1920x1080 · 5.7 GB\", for a quality picker."
+  @spec describe_quality(t()) :: String.t()
+  def describe_quality(metadata) do
+    [format_resolution(metadata), format_size(metadata.size_bytes)]
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" · ")
   end
@@ -60,10 +77,17 @@ defmodule PhoenixHologram.VideoMetadata do
     "#{Float.round(size_bytes / 1_000_000, 1)} MB"
   end
 
-  defp probe_and_cache(movie) do
-    metadata = probe(movie.path)
+  defp fetch_path(path, cache_path) do
+    case File.read(cache_path) do
+      {:ok, json} -> decode(json)
+      {:error, _} -> probe_and_cache(path, cache_path)
+    end
+  end
+
+  defp probe_and_cache(path, cache_path) do
+    metadata = probe(path)
     File.mkdir_p!(cache_dir())
-    File.write!(cache_path(movie), encode(metadata))
+    File.write!(cache_path, encode(metadata))
     metadata
   end
 
@@ -111,6 +135,10 @@ defmodule PhoenixHologram.VideoMetadata do
 
   defp cache_path(%Movie{id: id}) do
     Path.join(cache_dir(), "#{id}.json")
+  end
+
+  defp preview_cache_path(%Movie{id: id}) do
+    Path.join(cache_dir(), "#{id}_preview.json")
   end
 
   defp encode(metadata), do: Jason.encode!(metadata)
