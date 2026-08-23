@@ -585,7 +585,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
 
               <div class="lg:w-1/2">
                 <h2 class="text-xl font-semibold mb-3">All recognised faces</h2>
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4 max-h-[36rem] overflow-y-auto pr-1">
+                <div class="relative">
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4 max-h-[36rem] overflow-y-auto pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {%for face <- @faces}
                     <div class={
                       if face.voted do
@@ -619,7 +620,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                         <div class="badge badge-secondary badge-lg gap-1 text-base">
                           <span class="text-lg leading-none">👁</span> {face.focus_votes} in focus
                         </div>
-                        <div class="flex flex-wrap gap-1 justify-center w-full">
+                        <div class="flex flex-wrap gap-1 justify-center w-full max-h-24 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:oklch(50%_0_0/50%)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[oklch(50%_0_0/50%)] [&::-webkit-scrollbar-thumb]:rounded-full">
                           {%for scene <- face.scenes}
                             <span
                               $click={:show_scene, start_ms: scene.start_ms, end_ms: scene.end_ms, movie_id: @movie.id}
@@ -665,6 +666,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                       </div>
                     </div>
                   {/for}
+                </div>
+                <div class="pointer-events-none absolute inset-y-0 right-0 w-1.5 rounded-full bg-base-300/50">
+                  <div class="w-1.5 h-1/5 rounded-full bg-[oklch(50%_0_0/70%)]"></div>
+                </div>
                 </div>
               </div>
             </div>
