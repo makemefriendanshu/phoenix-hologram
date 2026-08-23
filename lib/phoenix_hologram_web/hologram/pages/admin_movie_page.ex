@@ -530,7 +530,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
               </Link>
               <details class="mt-2">
                 <summary class="text-xs cursor-pointer text-base-content/60">Rename movie</summary>
-                <form $submit={:save_movie_title, movie_id: @movie.id} class="flex gap-1 mt-1">
+                <form
+                  method="post"
+                  $submit={:save_movie_title, movie_id: @movie.id}
+                  class="flex gap-1 mt-1"
+                >
                   <input
                     type="text"
                     name="title"
@@ -692,7 +696,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                         </div>
                         <details class="w-full text-left">
                           <summary class="text-xs cursor-pointer text-base-content/60">Edit label</summary>
-                          <form $submit={:save_label, face_id: face.id} class="flex flex-col gap-1 mt-1">
+                          <form
+                            method="post"
+                            $submit={:save_label, face_id: face.id}
+                            class="flex flex-col gap-1 mt-1"
+                          >
                             <input
                               type="text"
                               name="label"
