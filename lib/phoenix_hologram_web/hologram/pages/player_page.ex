@@ -92,7 +92,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     |> Enum.map(fn scene ->
       scene_votes = Map.get(votes_by_scene, {scene.start_ms, scene.end_ms}, [])
       counts = Enum.frequencies_by(scene_votes, & &1.face_id)
-      my_vote = scene_votes |> Enum.find(&(&1.session_id == session_id)) |> then(&(&1 && &1.face_id))
+
+      my_voted_faces =
+        scene_votes |> Enum.filter(&(&1.session_id == session_id)) |> MapSet.new(& &1.face_id)
 
       %{
         start_ms: scene.start_ms,
@@ -104,7 +106,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               id: face_id,
               thumbnail_url: "/admin/faces/#{face_id}/thumbnail",
               votes: Map.get(counts, face_id, 0),
-              mine?: my_vote == face_id
+              mine?: MapSet.member?(my_voted_faces, face_id)
             }
           end)
       }
@@ -215,7 +217,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         faces =
           Enum.map(scene.faces, fn face ->
             votes = Map.get(params.counts, face.id, 0)
-            mine? = if is_mine, do: face.id == params.voted_face_id, else: face.mine?
+
+            mine? =
+              if is_mine and face.id == params.face_id, do: params.voted?, else: face.mine?
+
             %{face | votes: votes, mine?: mine?}
           end)
 
@@ -270,14 +275,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         %{movie_id: movie_id, scene_start_ms: scene_start_ms, scene_end_ms: scene_end_ms, face_id: face_id},
         server
       ) do
-    counts = FocusPoll.vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
+    {counts, voted?} =
+      FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
 
     put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
       scene_start_ms: scene_start_ms,
       scene_end_ms: scene_end_ms,
       counts: counts,
       voter_session_id: server.session_id,
-      voted_face_id: face_id
+      face_id: face_id,
+      voted?: voted?
     )
   end
 
@@ -368,7 +375,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             </div>
 
             <div class="lg:w-96 shrink-0 flex flex-col">
-              <div class="card bg-base-100 shadow flex-1 flex flex-col min-h-0">
+              <div class="card bg-base-100 shadow flex-1 flex flex-col min-h-0 overflow-hidden">
                 <div class="card-body py-4 flex-1 flex flex-col min-h-0">
                   <h2 class="text-lg font-semibold mb-1">Who's in focus?</h2>
                   {%if @current_scene == nil}
@@ -378,7 +385,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       <span class="badge badge-outline whitespace-nowrap">{@current_scene.time}</span>
                       <span class="text-xs text-base-content/60">Vote live for who's on screen</span>
                     </div>
-                    <div class="flex-1 min-h-0 max-h-[60vh] flex flex-col gap-3 overflow-y-auto">
+                    <div class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto">
                       {%for face <- @current_scene.faces}
                         <button
                           $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id}}
