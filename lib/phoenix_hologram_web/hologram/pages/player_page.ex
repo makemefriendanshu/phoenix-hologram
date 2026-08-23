@@ -307,8 +307,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             <span class="badge badge-outline">{@movie.status}</span>
           </div>
 
-          <div class="flex flex-col lg:flex-row gap-4 lg:items-stretch">
-            <div class="flex-1 min-w-0">
+          <div class="relative flex flex-col lg:flex-row gap-4">
+            <div class="flex-1 min-w-0 lg:pr-[25rem]">
               <video
                 id="player-video"
                 data-scene-boundaries={@scene_boundaries_json}
@@ -362,19 +362,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 })();
                 {/raw}
               </script>
-
-              <div class="mt-4 flex items-center gap-2">
-                <button
-                  $click={command: :like_movie, params: %{movie_id: @movie.id}}
-                  class={if @movie_liked? do "btn btn-sm btn-error" else "btn btn-sm btn-outline" end}
-                >
-                  {%if @movie_liked?}♥ Liked{%else}♥ Like{/if}
-                </button>
-                <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
-              </div>
             </div>
 
-            <div class="lg:w-96 shrink-0 flex flex-col">
+            <div class="flex flex-col lg:absolute lg:inset-y-0 lg:right-0 lg:w-96">
               <div class="card bg-base-100 shadow flex-1 flex flex-col min-h-0 overflow-hidden">
                 <div class="card-body py-4 flex-1 flex flex-col min-h-0">
                   <h2 class="text-lg font-semibold mb-1">Who's in focus?</h2>
@@ -400,6 +390,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 </div>
               </div>
             </div>
+          </div>
+
+          <div class="mt-4 flex items-center gap-2">
+            <button
+              $click={command: :like_movie, params: %{movie_id: @movie.id}}
+              class={if @movie_liked? do "btn btn-sm btn-error" else "btn btn-sm btn-outline" end}
+            >
+              {%if @movie_liked?}♥ Liked{%else}♥ Like{/if}
+            </button>
+            <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
           </div>
 
           <div class="mt-6">
