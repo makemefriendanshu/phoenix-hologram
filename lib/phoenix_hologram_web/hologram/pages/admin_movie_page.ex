@@ -13,7 +13,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   alias PhoenixHologram.FaceDetection.{Movie, SceneIndex}
   alias PhoenixHologram.FocusPoll
   alias PhoenixHologram.Repo
-  alias PhoenixHologram.VideoMetadata
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage
   alias PhoenixHologramWeb.Hologram.Pages.PlayerPage
 
@@ -472,7 +471,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
       id: movie.id,
       title: movie.title || movie.path,
       status: movie.status,
-      description: movie |> VideoMetadata.fetch() |> VideoMetadata.describe(),
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail"
     }
   end
@@ -571,7 +569,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
             />
             <div>
               <h1 class="text-2xl font-semibold">{@movie.title}</h1>
-              <p class="text-sm text-base-content/70">{@movie.description}</p>
               <p class="text-sm text-base-content/60 mb-2">{@face_count} unique face(s) recognised</p>
               <Link to={PlayerPage, id: @movie.id} class="btn btn-primary btn-sm">
                 Watch in Premiere Hall
