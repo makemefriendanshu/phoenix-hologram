@@ -717,6 +717,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                           <img src={"/admin/faces/#{face.id}/thumbnail"} class="w-10 h-10 rounded-full object-cover shrink-0" />
                           <span class="text-xs normal-case text-left leading-tight">
                             {face.label}<br />{face.votes} vote(s)
+                            {%if face.mine?}
+                              <span class="block font-semibold">✓ your vote</span>
+                            {/if}
                           </span>
                         </button>
                       {/for}

@@ -498,6 +498,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                           <img src={face.thumbnail_url} class="w-16 h-16 rounded-full object-cover shrink-0" />
                           <span class="text-base normal-case">
                             {face.votes} vote(s)
+                            {%if face.mine?}
+                              <span class="block text-sm font-semibold">✓ your vote</span>
+                            {/if}
                           </span>
                         </button>
                       {/for}
