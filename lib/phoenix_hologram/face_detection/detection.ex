@@ -9,13 +9,23 @@ defmodule PhoenixHologram.FaceDetection.Detection do
     field(:bbox_w, :float)
     field(:bbox_h, :float)
     field(:confidence, :float)
+    field(:embedding, PhoenixHologram.FaceDetection.Embedding)
 
     belongs_to(:face, PhoenixHologram.FaceDetection.Face)
   end
 
   def changeset(detection, attrs) do
     detection
-    |> cast(attrs, [:face_id, :frame_time_ms, :bbox_x, :bbox_y, :bbox_w, :bbox_h, :confidence])
+    |> cast(attrs, [
+      :face_id,
+      :frame_time_ms,
+      :bbox_x,
+      :bbox_y,
+      :bbox_w,
+      :bbox_h,
+      :confidence,
+      :embedding
+    ])
     |> validate_required([
       :face_id,
       :frame_time_ms,
@@ -23,7 +33,8 @@ defmodule PhoenixHologram.FaceDetection.Detection do
       :bbox_y,
       :bbox_w,
       :bbox_h,
-      :confidence
+      :confidence,
+      :embedding
     ])
   end
 end

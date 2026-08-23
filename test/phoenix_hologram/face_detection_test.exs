@@ -3,6 +3,7 @@ defmodule PhoenixHologram.FaceDetectionTest do
 
   alias PhoenixHologram.FaceDetection
   alias PhoenixHologram.FaceDetection.{Face, Movie}
+  alias PhoenixHologram.FaceThumbnail
 
   describe "Movie.changeset/2" do
     test "requires a path" do
@@ -49,6 +50,17 @@ defmodule PhoenixHologram.FaceDetectionTest do
         assert is_list(face.embedding)
         assert face.detections != []
       end
+
+      [first_face | _] = movie.faces
+      face_with_movie = %{first_face | movie: movie}
+      thumbnail_path = FaceThumbnail.generate!(face_with_movie)
+      assert File.regular?(thumbnail_path)
+      assert FaceThumbnail.thumbnail_ready?(face_with_movie)
+
+      assert {:ok, reingested_movie} = FaceDetection.ingest_video(video_path)
+      assert reingested_movie.id == movie.id
+      assert Repo.aggregate(Movie, :count, :id) == 1
+      assert Enum.map(reingested_movie.faces, & &1.id) != Enum.map(movie.faces, & &1.id)
     end
   end
 end

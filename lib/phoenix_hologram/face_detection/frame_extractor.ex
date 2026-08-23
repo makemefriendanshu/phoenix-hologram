@@ -62,7 +62,8 @@ defmodule PhoenixHologram.FaceDetection.FrameExtractor do
     {:ok, dir}
   end
 
-  defp ffmpeg_path do
+  @doc "Resolves the ffmpeg binary to use: system PATH first, else the bundled one."
+  def ffmpeg_path do
     cond do
       path = System.find_executable("ffmpeg") ->
         {:ok, path}
