@@ -14,10 +14,11 @@ defmodule PhoenixHologram.FocusPoll do
 
   @doc """
   Toggles this session's vote for one face within a scene: casts it if not
-  already voted, retracts it if it was. Returns `{updated_counts, voted?}`.
+  already voted, retracts it if it was. Returns
+  `{updated_counts, updated_voted_ats, voted?}`.
   """
   @spec toggle_vote(integer, integer, integer, integer, String.t()) ::
-          {%{integer => non_neg_integer}, boolean}
+          {%{integer => non_neg_integer}, %{integer => [NaiveDateTime.t()]}, boolean}
   def toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, session_id) do
     attrs = %{
       movie_id: movie_id,
@@ -38,7 +39,8 @@ defmodule PhoenixHologram.FocusPoll do
           false
       end
 
-    {scene_counts(movie_id, scene_start_ms, scene_end_ms), voted?}
+    {scene_counts(movie_id, scene_start_ms, scene_end_ms),
+     scene_voted_ats(movie_id, scene_start_ms, scene_end_ms), voted?}
   end
 
   @doc "Returns {face_id => vote count} for one scene."
@@ -50,6 +52,17 @@ defmodule PhoenixHologram.FocusPoll do
     |> select([v], {v.face_id, count(v.id)})
     |> Repo.all()
     |> Map.new()
+  end
+
+  @doc "Returns {face_id => every vote timestamp, most recent first} for one scene."
+  @spec scene_voted_ats(integer, integer, integer) :: %{integer => [NaiveDateTime.t()]}
+  def scene_voted_ats(movie_id, scene_start_ms, scene_end_ms) do
+    Vote
+    |> where(movie_id: ^movie_id, scene_start_ms: ^scene_start_ms, scene_end_ms: ^scene_end_ms)
+    |> select([v], {v.face_id, v.inserted_at})
+    |> Repo.all()
+    |> Enum.group_by(fn {face_id, _inserted_at} -> face_id end, fn {_face_id, inserted_at} -> inserted_at end)
+    |> Map.new(fn {face_id, timestamps} -> {face_id, Enum.sort(timestamps, {:desc, NaiveDateTime})} end)
   end
 
   @doc """
@@ -65,7 +78,8 @@ defmodule PhoenixHologram.FocusPoll do
       scene_start_ms: v.scene_start_ms,
       scene_end_ms: v.scene_end_ms,
       face_id: v.face_id,
-      session_id: v.session_id
+      session_id: v.session_id,
+      inserted_at: v.inserted_at
     })
     |> Repo.all()
   end

@@ -61,11 +61,17 @@ defmodule PhoenixHologram.Engagement do
   end
 
   @doc "Adds a top-level comment, or a reply when `parent_id` is given."
-  @spec add_comment(integer, String.t(), String.t(), integer | nil) ::
+  @spec add_comment(integer, String.t(), String.t(), String.t(), integer | nil) ::
           {:ok, Comment.t()} | {:error, Ecto.Changeset.t()}
-  def add_comment(movie_id, body, session_id, parent_id \\ nil) do
+  def add_comment(movie_id, body, session_id, author_name, parent_id \\ nil) do
     %Comment{}
-    |> Comment.changeset(%{movie_id: movie_id, body: body, session_id: session_id, parent_id: parent_id})
+    |> Comment.changeset(%{
+      movie_id: movie_id,
+      body: body,
+      session_id: session_id,
+      author_name: author_name,
+      parent_id: parent_id
+    })
     |> Repo.insert()
   end
 
@@ -115,12 +121,20 @@ defmodule PhoenixHologram.Engagement do
   end
 
   defp comment_view(comment, session_id) do
+    name = display_name(comment.author_name)
+
     %{
       id: comment.id,
       body: comment.body,
+      author_name: name,
+      author_initial: name |> String.slice(0, 1) |> String.upcase(),
       likes_count: comment_likes_count(comment.id),
       liked?: comment_liked?(comment.id, session_id),
       own?: comment.session_id == session_id
     }
   end
+
+  defp display_name(nil), do: "Anonymous"
+  defp display_name(""), do: "Anonymous"
+  defp display_name(name), do: name
 end

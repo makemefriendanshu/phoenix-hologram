@@ -21,19 +21,22 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     movie_record = Repo.get(Movie, params.id)
     movie = build_details(movie_record)
     session_id = server.session_id
+    focus_session_id = Ecto.UUID.generate()
 
     component =
       component
       |> put_state(:movie, movie)
       |> put_state(:session_id, session_id)
+      |> put_state(:focus_session_id, focus_session_id)
       |> put_state(:movie_likes_count, movie && Engagement.movie_likes_count(movie.id) || 0)
       |> put_state(:movie_liked?, (movie && Engagement.movie_liked?(movie.id, session_id)) || false)
       |> put_state(:comments, (movie && Engagement.list_comments(movie.id, session_id)) || [])
+      |> put_state(:commenter_name, "")
       |> put_state(:new_comment_body, "")
       |> put_state(:replying_to, nil)
       |> put_state(:reply_body, "")
 
-    scenes_list = (movie_record && movie_scenes(movie_record, session_id)) || []
+    scenes_list = (movie_record && movie_scenes(movie_record, focus_session_id)) || []
     scenes_by_key = Map.new(scenes_list, &{scene_key(&1), &1})
 
     component =
@@ -86,14 +89,15 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> FocusPoll.all_votes()
       |> Enum.group_by(&{&1.scene_start_ms, &1.scene_end_ms})
 
-    movie_record
-    |> Repo.preload(faces: :detections)
-    |> Map.fetch!(:faces)
+    preloaded_faces = movie_record |> Repo.preload(faces: :detections) |> Map.fetch!(:faces)
+    face_labels = Map.new(preloaded_faces, fn face -> {face.id, face.label} end)
+
+    preloaded_faces
     |> Enum.flat_map(& &1.detections)
     |> SceneIndex.scenes()
     |> Enum.map(fn scene ->
       scene_votes = Map.get(votes_by_scene, {scene.start_ms, scene.end_ms}, [])
-      counts = Enum.frequencies_by(scene_votes, & &1.face_id)
+      votes_by_face = Enum.group_by(scene_votes, & &1.face_id)
 
       my_voted_faces =
         scene_votes |> Enum.filter(&(&1.session_id == session_id)) |> MapSet.new(& &1.face_id)
@@ -104,11 +108,15 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         time: format_scene(scene),
         faces:
           Enum.map(scene.face_ids, fn face_id ->
+            face_votes = Map.get(votes_by_face, face_id, [])
+
             %{
               id: face_id,
+              label: Map.get(face_labels, face_id) || "Face ##{face_id}",
               thumbnail_url: "/admin/faces/#{face_id}/thumbnail",
-              votes: Map.get(counts, face_id, 0),
-              mine?: MapSet.member?(my_voted_faces, face_id)
+              votes: length(face_votes),
+              mine?: MapSet.member?(my_voted_faces, face_id),
+              voted_ats: face_votes |> voted_ats() |> Enum.map(&format_timestamp/1)
             }
           end)
       }
@@ -131,22 +139,29 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     "#{minutes}:#{padded_seconds}"
   end
 
+  defp voted_ats(votes), do: votes |> Enum.map(& &1.inserted_at) |> Enum.sort({:desc, NaiveDateTime})
+
+  defp format_timestamp(nil), do: nil
+  defp format_timestamp(%NaiveDateTime{} = dt), do: Calendar.strftime(dt, "%H:%M:%S UTC")
+
   defp build_details(nil), do: nil
 
   defp build_details(movie) do
     metadata = VideoMetadata.fetch(movie)
     qualities = build_qualities(movie, metadata)
     selected_quality = if VideoPreview.preview_ready?(movie), do: "preview", else: "source"
+    segment_downloads = segment_downloads(movie, selected_quality)
 
     %{
       id: movie.id,
       title: movie.title || movie.path,
       status: movie.status,
-      description: VideoMetadata.describe(metadata),
+      description: VideoMetadata.format_duration(metadata.duration_ms),
       video_url: video_url(movie.id, selected_quality),
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail",
       download_url: download_url(movie.id, selected_quality),
-      segment_downloads: segment_downloads(movie, selected_quality),
+      segment_downloads: segment_downloads,
+      segment_count: length(segment_downloads),
       qualities: qualities,
       selected_quality: selected_quality
     }
@@ -229,7 +244,15 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   end
 
   def action(:segment_downloads_updated, params, component) do
-    put_state(component, :movie, %{component.state.movie | segment_downloads: params.segment_downloads})
+    put_state(component, :movie, %{
+      component.state.movie
+      | segment_downloads: params.segment_downloads,
+        segment_count: length(params.segment_downloads)
+    })
+  end
+
+  def action(:update_commenter_name, params, component) do
+    put_state(component, :commenter_name, params.event.value)
   end
 
   def action(:update_comment_body, params, component) do
@@ -276,7 +299,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   end
 
   def action(:focus_vote_updated, params, component) do
-    my_session_id = component.state.session_id
+    my_session_id = component.state.focus_session_id
     is_mine = params.voter_session_id == my_session_id
     key = scene_key(params.scene_start_ms, params.scene_end_ms)
 
@@ -285,11 +308,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         faces =
           Enum.map(scene.faces, fn face ->
             votes = Map.get(params.counts, face.id, 0)
+            voted_ats = params.voted_ats |> Map.get(face.id, []) |> Enum.map(&format_timestamp/1)
 
             mine? =
               if is_mine and face.id == params.face_id, do: params.voted?, else: face.mine?
 
-            %{face | votes: votes, mine?: mine?}
+            %{face | votes: votes, mine?: mine?, voted_ats: voted_ats}
           end)
 
         %{scene | faces: faces}
@@ -319,14 +343,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     put_action(server, :movie_like_toggled, count: count, liked?: status == :liked)
   end
 
-  def command(:add_comment, %{movie_id: movie_id, body: body}, server) do
-    Engagement.add_comment(movie_id, body, server.session_id)
+  def command(:add_comment, %{movie_id: movie_id, body: body, name: name}, server) do
+    Engagement.add_comment(movie_id, body, server.session_id, name)
     comments = Engagement.list_comments(movie_id, server.session_id)
     put_action(server, :comment_added, comments: comments)
   end
 
-  def command(:add_reply, %{movie_id: movie_id, parent_id: parent_id, body: body}, server) do
-    Engagement.add_comment(movie_id, body, server.session_id, parent_id)
+  def command(:add_reply, %{movie_id: movie_id, parent_id: parent_id, body: body, name: name}, server) do
+    Engagement.add_comment(movie_id, body, server.session_id, name, parent_id)
     comments = Engagement.list_comments(movie_id, server.session_id)
     put_action(server, :reply_added, comments: comments)
   end
@@ -345,17 +369,23 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
   def command(
         :cast_focus_vote,
-        %{movie_id: movie_id, scene_start_ms: scene_start_ms, scene_end_ms: scene_end_ms, face_id: face_id},
+        %{
+          movie_id: movie_id,
+          scene_start_ms: scene_start_ms,
+          scene_end_ms: scene_end_ms,
+          face_id: face_id,
+          voter_id: voter_id
+        },
         server
       ) do
-    {counts, voted?} =
-      FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
+    {counts, voted_ats, voted?} = FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, voter_id)
 
     put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
       scene_start_ms: scene_start_ms,
       scene_end_ms: scene_end_ms,
       counts: counts,
-      voter_session_id: server.session_id,
+      voted_ats: voted_ats,
+      voter_session_id: voter_id,
       face_id: face_id,
       voted?: voted?
     )
@@ -465,14 +495,20 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       <span class="badge badge-outline whitespace-nowrap">{@current_scene.time}</span>
                       <span class="text-xs text-base-content/60">Vote live for who's on screen</span>
                     </div>
-                    <div class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto">
+                    <div class="flex-1 min-h-0 flex flex-wrap gap-2 overflow-y-auto content-start">
                       {%for face <- @current_scene.faces}
                         <button
-                          $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id}}
-                          class={if face.mine? do "btn btn-primary h-auto py-3 justify-start gap-3" else "btn btn-outline h-auto py-3 justify-start gap-3" end}
+                          $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
+                          title={Enum.join(face.voted_ats, "\n")}
+                          class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                         >
-                          <img src={face.thumbnail_url} class="w-16 h-16 rounded-full object-cover shrink-0" />
-                          <span class="text-base normal-case">{face.votes} vote(s)</span>
+                          <img src={face.thumbnail_url} class="w-10 h-10 rounded-full object-cover shrink-0" />
+                          <span class="text-xs normal-case text-left leading-tight">
+                            {face.label}<br />{face.votes} vote(s)
+                            {%if face.mine?}
+                              <span class="block font-semibold">✓ your vote</span>
+                            {/if}
+                          </span>
                         </button>
                       {/for}
                     </div>
@@ -492,53 +528,78 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
             <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
           </div>
 
-          <div class="mt-6">
-            <h2 class="text-sm font-semibold mb-2">Download</h2>
-            {%if length(@movie.qualities) > 1}
-              <div class="flex items-center gap-2 mb-3">
-                <label for="download-quality-select" class="text-xs text-base-content/60">Quality</label>
-                <select
-                  id="download-quality-select"
-                  $change="quality_changed"
-                  value={@movie.selected_quality}
-                  class="select select-bordered select-xs w-auto"
-                >
-                  {%for quality <- @movie.qualities}
-                    <option value={quality.key}>{quality.label}</option>
-                  {/for}
-                </select>
-              </div>
-            {/if}
-            <a href={@movie.download_url} download class="btn btn-sm btn-outline mb-2">
-              Download full movie
-            </a>
-            <p class="text-xs text-base-content/60 mb-2">
-              Or download in parts — each part is its own independently playable clip
-              (no need to join them), useful on a slow connection since each can be
-              retried on its own:
-            </p>
-            <div class="flex flex-wrap gap-2">
-              {%for segment <- @movie.segment_downloads}
-                <a href={segment.url} download class="btn btn-xs btn-outline">
-                  Part {segment.part}
+          <div class="mt-6 card bg-base-100 shadow">
+            <div class="card-body py-4">
+              <h2 class="text-sm font-semibold mb-3">Download</h2>
+
+              {%if length(@movie.qualities) > 1}
+                <div class="flex items-center gap-2 mb-3">
+                  <label for="download-quality-select" class="text-xs text-base-content/60">Quality</label>
+                  <select
+                    id="download-quality-select"
+                    $change="quality_changed"
+                    value={@movie.selected_quality}
+                    class="select select-bordered select-xs w-auto"
+                  >
+                    {%for quality <- @movie.qualities}
+                      <option value={quality.key}>{quality.label}</option>
+                    {/for}
+                  </select>
+                </div>
+              {/if}
+
+              <div class="flex flex-wrap items-center gap-2">
+                <a href={@movie.download_url} download class="btn btn-sm btn-primary">
+                  Download full movie
                 </a>
-              {/for}
+
+                {%if @movie.segment_count > 0}
+                  <div class="dropdown dropdown-bottom">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                      Download in parts ({@movie.segment_count}) ▾
+                    </div>
+                    <ul
+                      tabindex="0"
+                      class="dropdown-content menu menu-sm bg-base-100 rounded-box z-10 mt-1 w-44 p-2 shadow"
+                    >
+                      {%for segment <- @movie.segment_downloads}
+                        <li>
+                          <a href={segment.url} download>Part {segment.part}</a>
+                        </li>
+                      {/for}
+                    </ul>
+                  </div>
+                {/if}
+              </div>
+
+              <p class="text-xs text-base-content/60 mt-2">
+                Parts are independently playable clips — no need to join them. Handy on a slow
+                connection since each part can be retried on its own instead of restarting the
+                whole download.
+              </p>
             </div>
           </div>
 
           <div class="mt-8">
             <h2 class="text-lg font-semibold mb-3">Comments</h2>
 
-            <form $submit={command: :add_comment, params: %{movie_id: @movie.id, body: @new_comment_body}}>
-              <div class="flex gap-2 mb-4">
+            <form $submit={command: :add_comment, params: %{movie_id: @movie.id, body: @new_comment_body, name: @commenter_name}}>
+              <div class="flex flex-col gap-2 mb-4">
                 <input
                   type="text"
+                  value={@commenter_name}
+                  $change="update_commenter_name"
+                  placeholder="Your name"
+                  class="input input-bordered input-sm w-full sm:w-64"
+                />
+                <textarea
                   value={@new_comment_body}
                   $change="update_comment_body"
                   placeholder="Add a comment..."
-                  class="input input-bordered input-sm flex-1"
+                  rows="3"
+                  class="textarea textarea-bordered textarea-sm w-full"
                 />
-                <button type="submit" class="btn btn-sm btn-primary">Post</button>
+                <button type="submit" class="btn btn-sm btn-primary self-end">Post</button>
               </div>
             </form>
 
@@ -550,76 +611,100 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 {%for comment <- @comments}
                   <div class="card bg-base-100 shadow">
                     <div class="card-body py-3">
-                      <div class="flex items-center justify-between">
-                        <p class="text-sm">{comment.body}</p>
-                        <div class="flex items-center gap-2 shrink-0 ml-3">
-                          <button
-                            $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
-                            class={if comment.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
+                      <div class="flex items-start gap-3">
+                        <div class="avatar avatar-placeholder shrink-0">
+                          <div class="bg-neutral text-neutral-content rounded-full w-8">
+                            <span class="text-xs">{comment.author_initial}</span>
+                          </div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-center justify-between">
+                            <div class="min-w-0">
+                              <p class="text-xs font-semibold text-base-content/80">{comment.author_name}</p>
+                              <p class="text-sm">{comment.body}</p>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0 ml-3">
+                              <button
+                                $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
+                                class={if comment.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
+                              >
+                                ♥ {comment.likes_count}
+                              </button>
+                              <button
+                                $click={action: :start_reply, params: %{comment_id: comment.id}}
+                                class="btn btn-xs btn-ghost"
+                              >
+                                Reply
+                              </button>
+                              {%if comment.own?}
+                                <button
+                                  $click={command: :delete_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
+                                  class="btn btn-xs btn-ghost text-error"
+                                >
+                                  Delete
+                                </button>
+                              {/if}
+                            </div>
+                          </div>
+
+                          <form
+                            $submit={command: :add_reply, params: %{movie_id: @movie.id, parent_id: comment.id, body: @reply_body, name: @commenter_name}}
+                            class={if @replying_to == comment.id do "mt-2 ml-4" else "hidden" end}
                           >
-                            ♥ {comment.likes_count}
-                          </button>
-                          <button
-                            $click={action: :start_reply, params: %{comment_id: comment.id}}
-                            class="btn btn-xs btn-ghost"
-                          >
-                            Reply
-                          </button>
-                          {%if comment.own?}
-                            <button
-                              $click={command: :delete_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
-                              class="btn btn-xs btn-ghost text-error"
-                            >
-                              Delete
-                            </button>
+                            <div class="flex flex-col gap-2">
+                              <textarea
+                                value={@reply_body}
+                                $change="update_reply_body"
+                                placeholder="Write a reply..."
+                                rows="2"
+                                class="textarea textarea-bordered textarea-xs w-full"
+                              />
+                              <div class="flex gap-2 self-end">
+                                <button type="submit" class="btn btn-xs btn-primary">Reply</button>
+                                <button type="button" $click="cancel_reply" class="btn btn-xs btn-ghost">
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </form>
+
+                          {%if comment.replies != []}
+                            <div class="flex flex-col gap-3 mt-3 ml-6 border-l-2 border-base-300 pl-3">
+                              {%for reply <- comment.replies}
+                                <div class="flex items-start gap-2">
+                                  <div class="avatar avatar-placeholder shrink-0">
+                                    <div class="bg-neutral text-neutral-content rounded-full w-6">
+                                      <span class="text-[0.65rem]">{reply.author_initial}</span>
+                                    </div>
+                                  </div>
+                                  <div class="flex-1 min-w-0 flex items-center justify-between">
+                                    <div class="min-w-0">
+                                      <p class="text-xs font-semibold text-base-content/80">{reply.author_name}</p>
+                                      <p class="text-sm">{reply.body}</p>
+                                    </div>
+                                    <div class="flex items-center gap-2 shrink-0 ml-3">
+                                      <button
+                                        $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
+                                        class={if reply.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
+                                      >
+                                        ♥ {reply.likes_count}
+                                      </button>
+                                      {%if reply.own?}
+                                        <button
+                                          $click={command: :delete_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
+                                          class="btn btn-xs btn-ghost text-error"
+                                        >
+                                          Delete
+                                        </button>
+                                      {/if}
+                                    </div>
+                                  </div>
+                                </div>
+                              {/for}
+                            </div>
                           {/if}
                         </div>
                       </div>
-
-                      <form
-                        $submit={command: :add_reply, params: %{movie_id: @movie.id, parent_id: comment.id, body: @reply_body}}
-                        class={if @replying_to == comment.id do "mt-2 ml-4" else "hidden" end}
-                      >
-                        <div class="flex gap-2">
-                          <input
-                            type="text"
-                            value={@reply_body}
-                            $change="update_reply_body"
-                            placeholder="Write a reply..."
-                            class="input input-bordered input-xs flex-1"
-                          />
-                          <button type="submit" class="btn btn-xs btn-primary">Reply</button>
-                          <button type="button" $click="cancel_reply" class="btn btn-xs btn-ghost">
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-
-                      {%if comment.replies != []}
-                        <div class="flex flex-col gap-2 mt-3 ml-6 border-l-2 border-base-300 pl-3">
-                          {%for reply <- comment.replies}
-                            <div class="flex items-center justify-between">
-                              <p class="text-sm">{reply.body}</p>
-                              <div class="flex items-center gap-2 shrink-0 ml-3">
-                                <button
-                                  $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
-                                  class={if reply.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
-                                >
-                                  ♥ {reply.likes_count}
-                                </button>
-                                {%if reply.own?}
-                                  <button
-                                    $click={command: :delete_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
-                                    class="btn btn-xs btn-ghost text-error"
-                                  >
-                                    Delete
-                                  </button>
-                                {/if}
-                              </div>
-                            </div>
-                          {/for}
-                        </div>
-                      {/if}
                     </div>
                   </div>
                 {/for}
