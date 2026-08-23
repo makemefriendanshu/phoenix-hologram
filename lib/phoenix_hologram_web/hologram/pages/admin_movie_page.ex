@@ -27,11 +27,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   def init(params, component, server) do
     movie_record = Repo.get(Movie, params.id)
     preloaded = movie_record && Repo.preload(movie_record, faces: :detections)
-    session_id = server.session_id
+    focus_session_id = Ecto.UUID.generate()
 
     focus_totals = if movie_record, do: FocusPoll.face_totals(movie_record.id), else: %{}
     votes_by_scene = if movie_record, do: scene_votes_by_key(movie_record.id), else: %{}
-    scenes_list = if preloaded, do: movie_scenes(preloaded, votes_by_scene, session_id), else: []
+    scenes_list = if preloaded, do: movie_scenes(preloaded, votes_by_scene, focus_session_id), else: []
     scenes_by_key = Map.new(scenes_list, &{scene_key(&1), &1})
 
     faces =
@@ -47,7 +47,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     component =
       component
       |> put_state(:movie, movie)
-      |> put_state(:session_id, session_id)
+      |> put_state(:focus_session_id, focus_session_id)
       |> put_state(:faces, faces)
       |> put_state(:face_count, length(faces))
       |> put_state(:scenes, scenes_by_key)
@@ -176,7 +176,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   # scene, since that's the only case where a range could stop overlapping
   # any voted scene.
   def action(:focus_vote_updated, params, component) do
-    my_session_id = component.state.session_id
+    my_session_id = component.state.focus_session_id
     is_mine = params.voter_session_id == my_session_id
     key = scene_key(params.scene_start_ms, params.scene_end_ms)
 
@@ -293,18 +293,23 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
 
   def command(
         :cast_focus_vote,
-        %{movie_id: movie_id, scene_start_ms: scene_start_ms, scene_end_ms: scene_end_ms, face_id: face_id},
+        %{
+          movie_id: movie_id,
+          scene_start_ms: scene_start_ms,
+          scene_end_ms: scene_end_ms,
+          face_id: face_id,
+          voter_id: voter_id
+        },
         server
       ) do
-    {counts, voted_ats, voted?} =
-      FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, server.session_id)
+    {counts, voted_ats, voted?} = FocusPoll.toggle_vote(movie_id, scene_start_ms, scene_end_ms, face_id, voter_id)
 
     put_broadcast(server, {:focus_votes, movie_id}, :focus_vote_updated,
       scene_start_ms: scene_start_ms,
       scene_end_ms: scene_end_ms,
       counts: counts,
       voted_ats: voted_ats,
-      voter_session_id: server.session_id,
+      voter_session_id: voter_id,
       face_id: face_id,
       voted?: voted?
     )
@@ -705,7 +710,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                     <div class="flex flex-wrap gap-2">
                       {%for face <- @current_preview_scene.faces}
                         <button
-                          $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_preview_scene.start_ms, scene_end_ms: @current_preview_scene.end_ms, face_id: face.id}}
+                          $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_preview_scene.start_ms, scene_end_ms: @current_preview_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
                           title={Enum.join(face.voted_ats, "\n")}
                           class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                         >
