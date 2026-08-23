@@ -10,6 +10,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   alias PhoenixHologram.VideoMetadata
   alias PhoenixHologram.VideoPreview
   alias PhoenixHologram.VideoSegments
+  alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
   alias PhoenixHologramWeb.Hologram.Pages.PremierePage
 
   route "/premiere/:id"
@@ -440,6 +441,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
           <div class="flex items-center gap-3 mb-4">
             <p class="text-sm text-base-content/70">{@movie.description}</p>
             <span class="badge badge-outline badge-primary">{@movie.status}</span>
+            <Link to={AdminMoviePage, id: @movie.id} class="btn btn-xs btn-secondary">
+              Admin View ⚙
+            </Link>
           </div>
 
           <div class="relative flex flex-col lg:flex-row gap-4">

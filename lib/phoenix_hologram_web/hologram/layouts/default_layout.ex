@@ -1,9 +1,12 @@
 defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
   use Hologram.Component
 
+  alias Hologram.UI.Link
   alias Hologram.UI.Runtime
   alias PhoenixHologram.FaceDetection.Movie
   alias PhoenixHologram.Repo
+  alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
+  alias PhoenixHologramWeb.Hologram.Pages.PlayerPage
 
   # Shared site banner (identity band + gold nav + crossfading photo hero)
   # shown above every Hologram page — lives here, not in each page, so it
@@ -16,8 +19,14 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
   @hero_slide_seconds 5
 
   def init(_props, component, server) do
-    hero_images = Movie |> Repo.all() |> build_hero_images()
-    {put_state(component, :hero_images, hero_images), server}
+    movies = Repo.all(Movie)
+
+    component =
+      component
+      |> put_state(:hero_images, build_hero_images(movies))
+      |> put_state(:nav_movies, Enum.map(movies, &%{id: &1.id, title: &1.title || &1.path}))
+
+    {component, server}
   end
 
   defp build_hero_images([]), do: []
@@ -57,12 +66,32 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
         </div>
 
         <nav class="bg-gradient-to-r from-primary/60 via-primary to-primary/60 text-primary-content">
-          <div class="max-w-5xl mx-auto flex flex-wrap justify-center gap-x-3 gap-y-1 py-2 px-4 text-[0.65rem] sm:text-xs font-display tracking-[0.15em] uppercase">
-            <a href="/" class="hover:underline">Home</a>
+          <div class="max-w-5xl mx-auto flex flex-wrap justify-center items-center gap-x-3 gap-y-1 py-2 px-4 text-[0.65rem] sm:text-xs font-display tracking-[0.15em] uppercase">
+            <div class="dropdown">
+              <div tabindex="0" role="button" class="hover:underline cursor-pointer">Premiere Hall ▾</div>
+              <ul
+                tabindex="0"
+                class="dropdown-content menu menu-sm card-stock rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+              >
+                <li><a href="/premiere">All films</a></li>
+                {%for movie <- @nav_movies}
+                  <li><Link to={PlayerPage, id: movie.id}>{movie.title}</Link></li>
+                {/for}
+              </ul>
+            </div>
             <span class="opacity-50">|</span>
-            <a href="/premiere" class="hover:underline">Premiere Hall</a>
-            <span class="opacity-50">|</span>
-            <a href="/admin" class="hover:underline">Recognised Faces</a>
+            <div class="dropdown">
+              <div tabindex="0" role="button" class="hover:underline cursor-pointer">Recognised Faces ▾</div>
+              <ul
+                tabindex="0"
+                class="dropdown-content menu menu-sm card-stock rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+              >
+                <li><a href="/admin">All films</a></li>
+                {%for movie <- @nav_movies}
+                  <li><Link to={AdminMoviePage, id: movie.id}>{movie.title}</Link></li>
+                {/for}
+              </ul>
+            </div>
           </div>
         </nav>
 
