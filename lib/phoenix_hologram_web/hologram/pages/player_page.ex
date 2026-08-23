@@ -31,6 +31,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:movie_likes_count, movie && Engagement.movie_likes_count(movie.id) || 0)
       |> put_state(:movie_liked?, (movie && Engagement.movie_liked?(movie.id, session_id)) || false)
       |> put_state(:comments, (movie && Engagement.list_comments(movie.id, session_id)) || [])
+      |> put_state(:commenter_name, "")
       |> put_state(:new_comment_body, "")
       |> put_state(:replying_to, nil)
       |> put_state(:reply_body, "")
@@ -248,6 +249,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     })
   end
 
+  def action(:update_commenter_name, params, component) do
+    put_state(component, :commenter_name, params.event.value)
+  end
+
   def action(:update_comment_body, params, component) do
     put_state(component, :new_comment_body, params.event.value)
   end
@@ -336,14 +341,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     put_action(server, :movie_like_toggled, count: count, liked?: status == :liked)
   end
 
-  def command(:add_comment, %{movie_id: movie_id, body: body}, server) do
-    Engagement.add_comment(movie_id, body, server.session_id)
+  def command(:add_comment, %{movie_id: movie_id, body: body, name: name}, server) do
+    Engagement.add_comment(movie_id, body, server.session_id, name)
     comments = Engagement.list_comments(movie_id, server.session_id)
     put_action(server, :comment_added, comments: comments)
   end
 
-  def command(:add_reply, %{movie_id: movie_id, parent_id: parent_id, body: body}, server) do
-    Engagement.add_comment(movie_id, body, server.session_id, parent_id)
+  def command(:add_reply, %{movie_id: movie_id, parent_id: parent_id, body: body, name: name}, server) do
+    Engagement.add_comment(movie_id, body, server.session_id, name, parent_id)
     comments = Engagement.list_comments(movie_id, server.session_id)
     put_action(server, :reply_added, comments: comments)
   end
@@ -576,16 +581,23 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
           <div class="mt-8">
             <h2 class="text-lg font-semibold mb-3">Comments</h2>
 
-            <form $submit={command: :add_comment, params: %{movie_id: @movie.id, body: @new_comment_body}}>
-              <div class="flex gap-2 mb-4">
+            <form $submit={command: :add_comment, params: %{movie_id: @movie.id, body: @new_comment_body, name: @commenter_name}}>
+              <div class="flex flex-col gap-2 mb-4">
                 <input
                   type="text"
+                  value={@commenter_name}
+                  $change="update_commenter_name"
+                  placeholder="Your name"
+                  class="input input-bordered input-sm w-full sm:w-64"
+                />
+                <textarea
                   value={@new_comment_body}
                   $change="update_comment_body"
                   placeholder="Add a comment..."
-                  class="input input-bordered input-sm flex-1"
+                  rows="3"
+                  class="textarea textarea-bordered textarea-sm w-full"
                 />
-                <button type="submit" class="btn btn-sm btn-primary">Post</button>
+                <button type="submit" class="btn btn-sm btn-primary self-end">Post</button>
               </div>
             </form>
 
@@ -597,76 +609,100 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 {%for comment <- @comments}
                   <div class="card bg-base-100 shadow">
                     <div class="card-body py-3">
-                      <div class="flex items-center justify-between">
-                        <p class="text-sm">{comment.body}</p>
-                        <div class="flex items-center gap-2 shrink-0 ml-3">
-                          <button
-                            $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
-                            class={if comment.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
+                      <div class="flex items-start gap-3">
+                        <div class="avatar avatar-placeholder shrink-0">
+                          <div class="bg-neutral text-neutral-content rounded-full w-8">
+                            <span class="text-xs">{comment.author_initial}</span>
+                          </div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-center justify-between">
+                            <div class="min-w-0">
+                              <p class="text-xs font-semibold text-base-content/80">{comment.author_name}</p>
+                              <p class="text-sm">{comment.body}</p>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0 ml-3">
+                              <button
+                                $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
+                                class={if comment.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
+                              >
+                                ♥ {comment.likes_count}
+                              </button>
+                              <button
+                                $click={action: :start_reply, params: %{comment_id: comment.id}}
+                                class="btn btn-xs btn-ghost"
+                              >
+                                Reply
+                              </button>
+                              {%if comment.own?}
+                                <button
+                                  $click={command: :delete_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
+                                  class="btn btn-xs btn-ghost text-error"
+                                >
+                                  Delete
+                                </button>
+                              {/if}
+                            </div>
+                          </div>
+
+                          <form
+                            $submit={command: :add_reply, params: %{movie_id: @movie.id, parent_id: comment.id, body: @reply_body, name: @commenter_name}}
+                            class={if @replying_to == comment.id do "mt-2 ml-4" else "hidden" end}
                           >
-                            ♥ {comment.likes_count}
-                          </button>
-                          <button
-                            $click={action: :start_reply, params: %{comment_id: comment.id}}
-                            class="btn btn-xs btn-ghost"
-                          >
-                            Reply
-                          </button>
-                          {%if comment.own?}
-                            <button
-                              $click={command: :delete_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
-                              class="btn btn-xs btn-ghost text-error"
-                            >
-                              Delete
-                            </button>
+                            <div class="flex flex-col gap-2">
+                              <textarea
+                                value={@reply_body}
+                                $change="update_reply_body"
+                                placeholder="Write a reply..."
+                                rows="2"
+                                class="textarea textarea-bordered textarea-xs w-full"
+                              />
+                              <div class="flex gap-2 self-end">
+                                <button type="submit" class="btn btn-xs btn-primary">Reply</button>
+                                <button type="button" $click="cancel_reply" class="btn btn-xs btn-ghost">
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </form>
+
+                          {%if comment.replies != []}
+                            <div class="flex flex-col gap-3 mt-3 ml-6 border-l-2 border-base-300 pl-3">
+                              {%for reply <- comment.replies}
+                                <div class="flex items-start gap-2">
+                                  <div class="avatar avatar-placeholder shrink-0">
+                                    <div class="bg-neutral text-neutral-content rounded-full w-6">
+                                      <span class="text-[0.65rem]">{reply.author_initial}</span>
+                                    </div>
+                                  </div>
+                                  <div class="flex-1 min-w-0 flex items-center justify-between">
+                                    <div class="min-w-0">
+                                      <p class="text-xs font-semibold text-base-content/80">{reply.author_name}</p>
+                                      <p class="text-sm">{reply.body}</p>
+                                    </div>
+                                    <div class="flex items-center gap-2 shrink-0 ml-3">
+                                      <button
+                                        $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
+                                        class={if reply.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
+                                      >
+                                        ♥ {reply.likes_count}
+                                      </button>
+                                      {%if reply.own?}
+                                        <button
+                                          $click={command: :delete_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
+                                          class="btn btn-xs btn-ghost text-error"
+                                        >
+                                          Delete
+                                        </button>
+                                      {/if}
+                                    </div>
+                                  </div>
+                                </div>
+                              {/for}
+                            </div>
                           {/if}
                         </div>
                       </div>
-
-                      <form
-                        $submit={command: :add_reply, params: %{movie_id: @movie.id, parent_id: comment.id, body: @reply_body}}
-                        class={if @replying_to == comment.id do "mt-2 ml-4" else "hidden" end}
-                      >
-                        <div class="flex gap-2">
-                          <input
-                            type="text"
-                            value={@reply_body}
-                            $change="update_reply_body"
-                            placeholder="Write a reply..."
-                            class="input input-bordered input-xs flex-1"
-                          />
-                          <button type="submit" class="btn btn-xs btn-primary">Reply</button>
-                          <button type="button" $click="cancel_reply" class="btn btn-xs btn-ghost">
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-
-                      {%if comment.replies != []}
-                        <div class="flex flex-col gap-2 mt-3 ml-6 border-l-2 border-base-300 pl-3">
-                          {%for reply <- comment.replies}
-                            <div class="flex items-center justify-between">
-                              <p class="text-sm">{reply.body}</p>
-                              <div class="flex items-center gap-2 shrink-0 ml-3">
-                                <button
-                                  $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
-                                  class={if reply.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
-                                >
-                                  ♥ {reply.likes_count}
-                                </button>
-                                {%if reply.own?}
-                                  <button
-                                    $click={command: :delete_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
-                                    class="btn btn-xs btn-ghost text-error"
-                                  >
-                                    Delete
-                                  </button>
-                                {/if}
-                              </div>
-                            </div>
-                          {/for}
-                        </div>
-                      {/if}
                     </div>
                   </div>
                 {/for}
