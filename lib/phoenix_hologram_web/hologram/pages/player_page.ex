@@ -46,6 +46,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:scenes, scenes_by_key)
       |> put_state(:current_scene, find_current_scene(scenes_list, 0))
       |> put_state(:scene_boundaries_json, scene_boundaries_json(scenes_list))
+      |> put_state(:scene_changing_fast?, false)
 
     server = if movie, do: put_subscription(server, {:focus_votes, movie.id}), else: server
 
@@ -220,7 +221,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   # is an O(1) Map lookup rather than a scan through hundreds of scenes.
   def action(:scene_changed, params, component) do
     scene = Map.get(component.state.scenes, params.scene_key)
-    put_state(component, :current_scene, scene)
+
+    component
+    |> put_state(:current_scene, scene)
+    |> put_state(:scene_changing_fast?, Map.get(params, :fast_changing, false))
   end
 
   # Swapping `src` via plain JS (rather than just re-rendering the `src`
@@ -500,9 +504,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
                   var scenes = null;
                   var staleToleranceMs = 5000;
+                  var fastChangeThresholdMs = 1500;
                   var lastKey = "unset";
 
-                  function resolveScene(currentMs) {
+                  function resolveSceneIndex(currentMs) {
                     var idx = -1;
                     for (var i = 0; i < scenes.length; i++) {
                       if (scenes[i].start_ms <= currentMs) {
@@ -511,9 +516,17 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                         break;
                       }
                     }
-                    if (idx === -1) { return null; }
-                    if (currentMs - scenes[idx].end_ms > staleToleranceMs) { return null; }
-                    return scenes[idx];
+                    if (idx === -1) { return -1; }
+                    if (currentMs - scenes[idx].end_ms > staleToleranceMs) { return -1; }
+                    return idx;
+                  }
+
+                  // A scene is "fast-changing" if the next one starts too soon
+                  // after it for a viewer to reliably click a vote before the
+                  // panel moves on — used to nudge them to pause instead.
+                  function isFastChanging(idx) {
+                    if (idx === -1 || idx + 1 >= scenes.length) { return false; }
+                    return (scenes[idx + 1].start_ms - scenes[idx].start_ms) < fastChangeThresholdMs;
                   }
 
                   setInterval(function () {
@@ -525,12 +538,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                     }
 
                     var currentMs = Math.round(video.currentTime * 1000);
-                    var scene = resolveScene(currentMs);
+                    var idx = resolveSceneIndex(currentMs);
+                    var scene = idx === -1 ? null : scenes[idx];
                     var key = scene ? (scene.start_ms + ":" + scene.end_ms) : "none";
 
                     if (key !== lastKey) {
                       lastKey = key;
-                      Hologram.dispatchAction('scene_changed', 'page', { scene_key: key });
+                      Hologram.dispatchAction('scene_changed', 'page', {
+                        scene_key: key,
+                        fast_changing: isFastChanging(idx)
+                      });
                     }
                   }, 200);
                 })();
@@ -547,7 +564,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                   {%else}
                     <div class="flex items-center gap-2 mb-2">
                       <span class="badge badge-outline whitespace-nowrap">{@current_scene.time}</span>
-                      <span class="text-xs text-base-content/60">Vote live for who's on screen</span>
+                      {%if @scene_changing_fast?}
+                        <span class="text-xs text-warning truncate">⏸ Changing fast — pause to vote</span>
+                      {%else}
+                        <span class="text-xs text-base-content/60 truncate">Vote live for who's on screen</span>
+                      {/if}
                     </div>
                     <div class="flex-1 min-h-0 flex flex-wrap gap-2 overflow-y-auto content-start">
                       {%for face <- @current_scene.faces}
