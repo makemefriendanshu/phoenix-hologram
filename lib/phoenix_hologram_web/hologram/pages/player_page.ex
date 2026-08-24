@@ -725,19 +725,19 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 {%for comment <- @comments}
                   <div class="card card-stock shadow">
                     <div class="card-body py-3">
-                      <div class="flex items-start gap-3">
+                      <div class="flex items-start gap-2 sm:gap-3">
                         <div class="avatar avatar-placeholder shrink-0">
-                          <div class="bg-neutral text-neutral-content rounded-full w-8">
+                          <div class="bg-neutral text-neutral-content rounded-full w-6 sm:w-8">
                             <span class="text-xs">{comment.author_initial}</span>
                           </div>
                         </div>
                         <div class="flex-1 min-w-0">
-                          <div class="flex items-center justify-between">
+                          <div class="flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
                             <div class="min-w-0">
                               <p class="text-xs font-semibold text-base-content/80">{comment.author_name}</p>
                               <p class="text-sm">{comment.body}</p>
                             </div>
-                            <div class="flex items-center gap-2 shrink-0 ml-3">
+                            <div class="flex items-center gap-2 shrink-0">
                               <button
                                 $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
                                 class={if comment.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
@@ -783,20 +783,20 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                           </form>
 
                           {%if comment.replies != []}
-                            <div class="flex flex-col gap-3 mt-3 ml-6 border-l-2 border-base-300 pl-3">
+                            <div class="flex flex-col gap-3 mt-3 ml-2 sm:ml-6 border-l-2 border-base-300 pl-1.5 sm:pl-3">
                               {%for reply <- comment.replies}
-                                <div class="flex items-start gap-2">
+                                <div class="flex items-start gap-1 sm:gap-2">
                                   <div class="avatar avatar-placeholder shrink-0">
-                                    <div class="bg-neutral text-neutral-content rounded-full w-6">
+                                    <div class="bg-neutral text-neutral-content rounded-full w-5 sm:w-6">
                                       <span class="text-[0.65rem]">{reply.author_initial}</span>
                                     </div>
                                   </div>
-                                  <div class="flex-1 min-w-0 flex items-center justify-between">
+                                  <div class="flex-1 min-w-0 flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
                                     <div class="min-w-0">
                                       <p class="text-xs font-semibold text-base-content/80">{reply.author_name}</p>
-                                      <p class="text-sm">{reply.body}</p>
+                                      <p class="text-xs sm:text-sm">{reply.body}</p>
                                     </div>
-                                    <div class="flex items-center gap-2 shrink-0 ml-3">
+                                    <div class="flex items-center gap-2 shrink-0">
                                       <button
                                         $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
                                         class={if reply.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
