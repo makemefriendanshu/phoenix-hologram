@@ -106,18 +106,30 @@ defmodule PhoenixHologram.Engagement do
   @doc "Toggles this session's like on a comment. Returns {:liked | :unliked, new_count}."
   @spec toggle_comment_like(integer, String.t()) :: {:liked | :unliked, non_neg_integer}
   def toggle_comment_like(comment_id, session_id) do
-    case Repo.get_by(CommentLike, comment_id: comment_id, session_id: session_id) do
-      nil ->
-        %CommentLike{}
-        |> CommentLike.changeset(%{comment_id: comment_id, session_id: session_id})
-        |> Repo.insert!()
+    # mode: :immediate grabs the SQLite write lock at BEGIN instead of the default
+    # deferred mode (which only grabs it at the first write). Without it, two
+    # toggles racing on the same (comment_id, session_id) both take their read
+    # snapshot before either writes, so the second one's write can't be
+    # reconciled with its now-stale snapshot and fails with an unretriable
+    # "database is busy" (SQLITE_BUSY_SNAPSHOT) regardless of busy_timeout.
+    Repo.transaction(
+      fn ->
+        case Repo.get_by(CommentLike, comment_id: comment_id, session_id: session_id) do
+          nil ->
+            %CommentLike{}
+            |> CommentLike.changeset(%{comment_id: comment_id, session_id: session_id})
+            |> Repo.insert!()
 
-        {:liked, comment_likes_count(comment_id)}
+            {:liked, comment_likes_count(comment_id)}
 
-      like ->
-        Repo.delete!(like)
-        {:unliked, comment_likes_count(comment_id)}
-    end
+          like ->
+            Repo.delete!(like)
+            {:unliked, comment_likes_count(comment_id)}
+        end
+      end,
+      mode: :immediate
+    )
+    |> then(fn {:ok, result} -> result end)
   end
 
   defp comment_view(comment, session_id) do
