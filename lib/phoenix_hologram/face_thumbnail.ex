@@ -60,7 +60,12 @@ defmodule PhoenixHologram.FaceThumbnail do
     args = [
       "-y",
       "-ss",
-      "#{frame_time_ms / 1000}",
+      # Plain string interpolation renders a "round" float like 2300.0 as
+      # "2.3e3" (Elixir's shortest round-trip representation, picked
+      # because it's fewer characters) — ffmpeg's -ss rejects scientific
+      # notation. float_to_binary with a fixed decimal count always
+      # produces plain notation instead.
+      :erlang.float_to_binary(frame_time_ms / 1000, decimals: 3),
       "-i",
       video_path,
       "-vframes",

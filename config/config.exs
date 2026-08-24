@@ -11,7 +11,14 @@ config :phoenix_hologram,
   ecto_repos: [PhoenixHologram.Repo],
   generators: [timestamp_type: :utc_datetime]
 
-config :phoenix_hologram, PhoenixHologram.Repo, adapter: Ecto.Adapters.SQLite3
+# busy_timeout raised from the 2000ms default: SQLite allows only one writer at a
+# time, so two connections racing to write (e.g. two rapid like-toggle clicks) need
+# to be able to wait out a queued write transaction rather than give up early with
+# Exqlite.Error. Read-only queries are unaffected (WAL allows concurrent readers),
+# so this doesn't touch normal page-load throughput the way pool_size: 1 would.
+config :phoenix_hologram, PhoenixHologram.Repo,
+  adapter: Ecto.Adapters.SQLite3,
+  busy_timeout: 10_000
 
 # Configure the endpoint
 config :phoenix_hologram, PhoenixHologramWeb.Endpoint,

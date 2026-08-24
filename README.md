@@ -38,16 +38,22 @@ mix precommit                  # compile --warnings-as-errors, deps.unlock --unu
 mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps preview proxies for movies that lack one, for bandwidth-constrained playback
 ```
 
+### Theme
+
+All Hologram pages (everything except `/`) share one `DefaultLayout` (`lib/phoenix_hologram_web/hologram/layouts/default_layout.ex`), which renders a "Shubh Vivaha" wedding-invitation banner — gold/cream palette, a Cinzel/Cormorant Garamond display face, an identity band + nav, and a crossfading photo hero built from the ingested movies' thumbnails — above every page's own content, so it only has to be maintained in one place. `/` (the stock Phoenix landing page) gets the same gold/cream palette and background via `app.css`, styled independently since it isn't a Hologram page.
+
+Every page also has a "Theme" picker (top-right on `/`, in the nav bar on Hologram pages) listing all 35 daisyUI themes plus "System" — `light`/`dark` are the bespoke gold/cream and maroon/gold wedding palettes (`app.css`), the other 33 are daisyUI's stock presets. The full theme name list lives in `PhoenixHologramWeb.DaisyThemes`. The picked theme is stored under the `phx:theme` `localStorage` key, shared by `root.html.heex` and `DefaultLayout`, so it carries over between `/` and the Hologram pages.
+
 ### Pages
 
-- `/` — stock Phoenix page.
+- `/` — landing page.
 - `/hologram` — Hologram demo page.
-- `/admin`, `/admin/movies/:id` — per-movie scene timeline and recognised faces (nameable, with thumbnails and timestamp ranges badged as playable clips, each carrying a focus-vote count that always matches the scene shown when clicked).
+- `/admin`, `/admin/movies/:id` — per-movie scene timeline and recognised faces (nameable, with thumbnails and timestamp ranges badged as playable clips, each carrying a focus-vote count that always matches the scene shown when clicked). The scene-preview modal shows the clip and the "who's in focus" voting panel side by side.
 - `/premiere`, `/premiere/:id` — plays a movie, with:
   - live "who's in focus" voting: multiple named faces per scene, each showing its vote count, a "your vote" indicator, and the full per-vote timestamp history as a hover tooltip (voting identity is scoped to the page load, so refreshing lets you vote again) — laid out as the same compact, wrapping card grid as the admin scene-preview panel
   - comments (replies + likes), each poster naming themselves and shown with an avatar of their name's initial
-  - a like button (same per-page-load scoping as focus votes — each viewing can add one like, and refreshing resets the button so it's ready again, e.g. for a shared/kiosk screen)
-  - a quality selector (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown)
+  - a like button — toggles liked/unliked within the current view, but (like focus votes) isn't remembered across reloads: refreshing always resets it to "ready to like", e.g. for a shared/kiosk screen, while the total count persists
+  - a themed quality-picker dropdown (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown)
 
   Over the ngrok tunnel, large videos are bandwidth-capped (free tier), so playback can stall on multi-GB files — fine on localhost.
 
@@ -65,6 +71,8 @@ mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps preview pr
 | 7 | Premiere Hall viewer page: scheduled, synced playback | 🟡 No showtime scheduling yet; playback not synced across viewers |
 | 8 | Live comments during a showtime | 🟡 Post/reply/like/delete works, each poster names themselves and gets an initial avatar, but isn't broadcast live to co-viewers |
 | 9 | Live focus-voting + share-count tracking | 🟡 Focus voting is live (PubSub) and allows multiple faces per scene; share-count tracking not implemented |
+| 10 | Gold/cream wedding-invitation theme across all pages | ✅ Done — see [Theme](#theme) |
+| 11 | Selectable daisyUI theme picker on every page | ✅ Done — see [Theme](#theme) |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
