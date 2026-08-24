@@ -48,6 +48,10 @@ Every page also has a "Theme" picker (top-right on `/`, in the nav bar on Hologr
 
 Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — the wedding logo above a gold spinner ring — if the initial load is taking a moment, so a slow connection doesn't leave visitors staring at a blank tab. It's built and torn down entirely in an inline `<script>`/`<style>` placed ahead of the `app.css` `<link>` in `<head>` (a stylesheet blocks execution of any synchronous `<script>` after it, so the overlay has to come first to render before app.css itself has necessarily finished loading), revealed only after a short delay so a fast load never flashes it, and hidden once `window.load` fires. On Hologram pages it's appended outside `<body>` rather than declared in the page template, since the Hologram client runtime replaces its whole rendered DOM tree on mount and would otherwise wipe out the overlay's state.
 
+### Mobile layout
+
+`html { font-size: 27px }` (`app.css`) scales every rem-based Tailwind/daisyUI size ~1.7x site-wide, so a plain `w-64` renders at 432px, not the usual 256px — fine on desktop, but a fixed-width dropdown or a few "small" nested margins/gaps can blow past a phone's viewport. The quality-picker dropdown and the comment reply threads on `/premiere/:id` both hit this; fixed with a viewport-relative `max-w-[calc(...)]` cap and `sm:`-only spacing/avatar sizing so mobile gets a tighter layout without touching desktop. Any new fixed-width or deeply-nested mobile UI should be checked against this scaling before assuming a Tailwind class "looks about right".
+
 ### Pages
 
 - `/` — landing page.
@@ -58,7 +62,7 @@ Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — 
   - comments (replies + likes), each poster naming themselves and shown with an avatar of their name's initial
   - a like button — toggles liked/unliked within the current view, but (like focus votes) isn't remembered across reloads: refreshing always resets it to "ready to like", e.g. for a shared/kiosk screen, while the total count persists
   - a view count — recorded once per movie per page load, the first time playback actually starts (pausing/scrubbing/replaying doesn't add more)
-  - a themed quality-picker dropdown (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown)
+  - a themed quality-picker dropdown (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown) — see [Mobile layout](#mobile-layout) for how it (and the comment threads above) stay on-screen on phones
 
   Over the ngrok tunnel, large videos are bandwidth-capped (free tier), so playback can stall on multi-GB files — fine on localhost.
 
