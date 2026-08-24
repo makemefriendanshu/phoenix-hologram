@@ -105,13 +105,19 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
         </script>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Phoenix Hologram</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="alternate icon" href="/favicon.ico" sizes="any" />
         <link rel="stylesheet" href="/assets/css/app.css" />
         <Runtime />
       </head>
       <body class="wedding-bg min-h-screen flex flex-col">
         <div class="card-stock border-b border-primary/30 px-6 py-4">
           <div class="max-w-5xl mx-auto flex items-start">
-            <div class="flex-1"></div>
+            <div class="flex-1">
+              <a href="/">
+                <img src="/images/logo.svg" class="h-14 sm:h-16 w-auto" alt="Shubh Vivah" />
+              </a>
+            </div>
             <div class="flex-1 text-center">
               <a href="/" class="font-display text-3xl sm:text-4xl text-secondary tracking-wide">Shubh Vivaha</a>
               <p class="text-xs italic text-base-content/60 -mt-1">(A sacred union)</p>
