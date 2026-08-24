@@ -8,7 +8,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
   use Hologram.Page
 
   alias Hologram.UI.Link
-  alias PhoenixHologram.FaceDetection.Movie
+  alias PhoenixHologram.FaceDetection
   alias PhoenixHologram.Repo
   alias PhoenixHologram.VideoMetadata
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
@@ -20,8 +20,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
 
   def init(_params, component, _server) do
     movies =
-      Movie
-      |> Repo.all()
+      FaceDetection.list_movies_ordered()
       |> Repo.preload(:faces)
       |> Enum.map(fn movie ->
         %{

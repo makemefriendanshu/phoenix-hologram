@@ -3,8 +3,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
 
   alias Hologram.UI.Link
   alias Hologram.UI.Runtime
-  alias PhoenixHologram.FaceDetection.Movie
-  alias PhoenixHologram.Repo
+  alias PhoenixHologram.FaceDetection
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
   alias PhoenixHologramWeb.Hologram.Pages.PlayerPage
 
@@ -19,7 +18,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
   @hero_slide_seconds 5
 
   def init(_props, component, server) do
-    movies = Repo.all(Movie)
+    movies = FaceDetection.list_movies_ordered()
 
     component =
       component
