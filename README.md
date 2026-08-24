@@ -42,6 +42,8 @@ mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps preview pr
 
 All Hologram pages (everything except `/`) share one `DefaultLayout` (`lib/phoenix_hologram_web/hologram/layouts/default_layout.ex`), which renders a "Shubh Vivaha" wedding-invitation banner — gold/cream palette, a Cinzel/Cormorant Garamond display face, an identity band + nav, and a crossfading photo hero built from the ingested movies' thumbnails — above every page's own content, so it only has to be maintained in one place. `/` (the stock Phoenix landing page) gets the same gold/cream palette and background via `app.css`, styled independently since it isn't a Hologram page.
 
+Every page also has a "Theme" picker (top-right on `/`, in the nav bar on Hologram pages) listing all 35 daisyUI themes plus "System" — `light`/`dark` are the bespoke gold/cream and maroon/gold wedding palettes (`app.css`), the other 33 are daisyUI's stock presets. The full theme name list lives in `PhoenixHologramWeb.DaisyThemes`. The picked theme is stored under the `phx:theme` `localStorage` key, shared by `root.html.heex` and `DefaultLayout`, so it carries over between `/` and the Hologram pages.
+
 ### Pages
 
 - `/` — landing page.
@@ -70,6 +72,7 @@ All Hologram pages (everything except `/`) share one `DefaultLayout` (`lib/phoen
 | 8 | Live comments during a showtime | 🟡 Post/reply/like/delete works, each poster names themselves and gets an initial avatar, but isn't broadcast live to co-viewers |
 | 9 | Live focus-voting + share-count tracking | 🟡 Focus voting is live (PubSub) and allows multiple faces per scene; share-count tracking not implemented |
 | 10 | Gold/cream wedding-invitation theme across all pages | ✅ Done — see [Theme](#theme) |
+| 11 | Selectable daisyUI theme picker on every page | ✅ Done — see [Theme](#theme) |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 

@@ -17,7 +17,7 @@
 
 /* daisyUI Tailwind Plugin. */
 @plugin "daisyui/packages/bundle/daisyui" {
-  themes: false;
+  themes: all;
 }
 
 /* daisyUI theme plugin.

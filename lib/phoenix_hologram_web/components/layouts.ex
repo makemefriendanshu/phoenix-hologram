@@ -51,7 +51,7 @@ defmodule PhoenixHologramWeb.Layouts do
             <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
           </li>
           <li>
-            <.theme_toggle />
+            <.theme_picker />
           </li>
           <li>
             <a href="https://phoenix.hexdocs.pm/overview.html" class="btn btn-primary">
@@ -122,38 +122,41 @@ defmodule PhoenixHologramWeb.Layouts do
   end
 
   @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
+  Dropdown listing every daisyUI theme enabled in app.css (plus "System",
+  which follows the OS light/dark preference), so any theme can be picked
+  from any page.
 
   See <head> in root.html.heex which applies the theme before page load.
   """
-  def theme_toggle(assigns) do
+  def theme_picker(assigns) do
+    assigns = assign(assigns, :themes, PhoenixHologramWeb.DaisyThemes.themes())
+
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
+    <div class="dropdown dropdown-end">
+      <div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
+        <.icon name="hero-swatch-micro" class="size-4 opacity-75" />
+        <span class="hidden sm:inline">Theme</span>
+      </div>
+      <ul
+        tabindex="0"
+        class="dropdown-content menu menu-sm bg-base-200 text-base-content rounded-box z-30 mt-2 w-48 max-h-80 overflow-y-auto p-2 shadow"
       >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-      >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-      >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
+        <li>
+          <button type="button" phx-click={JS.dispatch("phx:set-theme")} data-phx-theme="system">
+            System
+          </button>
+        </li>
+        <li :for={theme <- @themes}>
+          <button
+            type="button"
+            phx-click={JS.dispatch("phx:set-theme")}
+            data-phx-theme={theme}
+            class="capitalize"
+          >
+            {theme}
+          </button>
+        </li>
+      </ul>
     </div>
     """
   end

@@ -23,6 +23,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
     component =
       component
       |> put_state(:hero_images, build_hero_images(movies))
+      |> put_state(:themes, PhoenixHologramWeb.DaisyThemes.themes())
       |> put_state(
         :nav_movies,
         Enum.map(movies, fn movie ->
@@ -49,9 +50,47 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
   def template do
     ~HOLO"""
     <!DOCTYPE html>
-    <html lang="en" data-theme="light">
+    <html lang="en">
       <head>
         <meta charset="utf-8" />
+        <script>
+          {%raw}
+          (function () {
+            // Applies the chosen daisyUI theme before first paint, and
+            // exposes window.phSetTheme so the "Theme" nav dropdown below can
+            // change it. Shares the "phx:theme" localStorage key and the
+            // data-theme/data-theme-source attributes with root.html.heex, so
+            // a theme picked on a Hologram page (e.g. /premiere) also applies
+            // on the plain Phoenix "/" page, and vice versa.
+            var STORAGE_KEY = 'phx:theme';
+
+            function systemTheme() {
+              return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+
+            function setTheme(theme) {
+              if (theme === 'system') {
+                localStorage.removeItem(STORAGE_KEY);
+                document.documentElement.setAttribute('data-theme', systemTheme());
+                document.documentElement.setAttribute('data-theme-source', 'system');
+              } else {
+                localStorage.setItem(STORAGE_KEY, theme);
+                document.documentElement.setAttribute('data-theme', theme);
+                document.documentElement.setAttribute('data-theme-source', 'user');
+              }
+            }
+
+            window.phSetTheme = setTheme;
+            setTheme(localStorage.getItem(STORAGE_KEY) || 'system');
+
+            matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+              if (document.documentElement.getAttribute('data-theme-source') === 'system') {
+                setTheme('system');
+              }
+            });
+          })();
+          {/raw}
+        </script>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Phoenix Hologram</title>
         <link rel="stylesheet" href="/assets/css/app.css" />
@@ -126,6 +165,33 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
                       <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
                       <span class="truncate">{movie.title}</span>
                     </Link>
+                  </li>
+                {/for}
+              </ul>
+            </div>
+            <span class="opacity-50">|</span>
+            <div class="dropdown dropdown-end">
+              <div tabindex="0" role="button" class="hover:underline cursor-pointer">Theme ▾</div>
+              <ul
+                tabindex="0"
+                class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-48 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+              >
+                <li>
+                  <a
+                    onclick="phSetTheme('system')"
+                    class="cursor-pointer hover:bg-secondary hover:text-primary-content"
+                  >
+                    System
+                  </a>
+                </li>
+                {%for theme <- @themes}
+                  <li>
+                    <a
+                      onclick={"phSetTheme('#{theme}')"}
+                      class="capitalize cursor-pointer hover:bg-secondary hover:text-primary-content"
+                    >
+                      {theme}
+                    </a>
                   </li>
                 {/for}
               </ul>
