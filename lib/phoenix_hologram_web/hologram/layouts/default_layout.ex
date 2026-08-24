@@ -154,12 +154,42 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
           </div>
         </div>
 
-        <main class="flex-1">
+        <main id="page-content" class="flex-1">
           <slot />
         </main>
         <footer class="footer footer-center border-t border-primary/30 text-base-content/70 p-4 text-sm">
           <a href="/" class="link link-hover">&larr; Back to home</a>
         </footer>
+
+        <script>
+          {%raw}
+          (function () {
+            // The identity band, nav, and hero banner above #page-content
+            // are identical on every page, so landing at the very top just
+            // re-shows the same header on each navigation. The Hologram
+            // client runtime forces window.scrollTo(0, 0) on every SPA
+            // navigation (loadNewPage, right before history.pushState) -
+            // wrapping pushState runs this right after that reset, in the
+            // same synchronous tick, so it overrides the jump-to-top with a
+            // landing just past the banner instead. Also covers a real full
+            // page load or refresh, and browser back/forward (popstate).
+            function scrollPastBanner() {
+              var el = document.getElementById('page-content');
+              if (el) { el.scrollIntoView({ behavior: 'auto', block: 'start' }); }
+            }
+
+            scrollPastBanner();
+
+            var originalPushState = history.pushState;
+            history.pushState = function () {
+              originalPushState.apply(history, arguments);
+              scrollPastBanner();
+            };
+
+            window.addEventListener('popstate', scrollPastBanner);
+          })();
+          {/raw}
+        </script>
       </body>
     </html>
     """
