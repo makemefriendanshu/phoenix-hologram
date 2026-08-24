@@ -173,9 +173,16 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
             // same synchronous tick, so it overrides the jump-to-top with a
             // landing just past the banner instead. Also covers a real full
             // page load or refresh, and browser back/forward (popstate).
+            // Stops a bit short of aligning #page-content flush with the
+            // viewport top, so the landing scroll distance is a little
+            // shorter and the very bottom of the hero stays peeking in.
+            var shortfallPx = 120;
+
             function scrollPastBanner() {
               var el = document.getElementById('page-content');
-              if (el) { el.scrollIntoView({ behavior: 'auto', block: 'start' }); }
+              if (!el) { return; }
+              var targetY = el.getBoundingClientRect().top + window.scrollY - shortfallPx;
+              window.scrollTo(0, Math.max(0, targetY));
             }
 
             scrollPastBanner();
