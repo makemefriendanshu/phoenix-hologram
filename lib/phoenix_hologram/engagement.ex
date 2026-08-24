@@ -1,8 +1,12 @@
 defmodule PhoenixHologram.Engagement do
   @moduledoc """
-  Likes and comments for movies, and likes on those comments. A like is
-  keyed by (subject, session_id), so clicking again within the same
-  session toggles it off rather than adding another one.
+  Likes and comments for movies, and likes on those comments. A movie like
+  can be toggled on and off within a single page view (the page tracks the
+  id of the like it just added so it can remove that exact row again), but
+  that "liked" state isn't remembered across reloads - each fresh page load
+  starts unliked, regardless of past likes from that session. Comment likes
+  are keyed by (comment, session_id) instead, so clicking again within the
+  same session toggles it off rather than adding another one.
   """
 
   import Ecto.Query
@@ -15,26 +19,29 @@ defmodule PhoenixHologram.Engagement do
     MovieLike |> where(movie_id: ^movie_id) |> Repo.aggregate(:count)
   end
 
-  @spec movie_liked?(integer, String.t()) :: boolean
-  def movie_liked?(movie_id, session_id) do
-    Repo.exists?(from m in MovieLike, where: m.movie_id == ^movie_id and m.session_id == ^session_id)
+  @doc "Adds a like to a movie. Returns {like_id, new_count} - keep like_id to unlike it again."
+  @spec add_movie_like(integer, String.t()) :: {integer, non_neg_integer}
+  def add_movie_like(movie_id, session_id) do
+    like =
+      %MovieLike{}
+      |> MovieLike.changeset(%{movie_id: movie_id, session_id: session_id})
+      |> Repo.insert!()
+
+    {like.id, movie_likes_count(movie_id)}
   end
 
-  @doc "Toggles this session's like on a movie. Returns {:liked | :unliked, new_count}."
-  @spec toggle_movie_like(integer, String.t()) :: {:liked | :unliked, non_neg_integer}
-  def toggle_movie_like(movie_id, session_id) do
-    case Repo.get_by(MovieLike, movie_id: movie_id, session_id: session_id) do
-      nil ->
-        %MovieLike{}
-        |> MovieLike.changeset(%{movie_id: movie_id, session_id: session_id})
-        |> Repo.insert!()
+  @doc """
+  Removes a specific like (by the id returned from add_movie_like/2), scoped
+  to the given movie and session so a tampered id can't delete someone
+  else's like. Returns the new total like count.
+  """
+  @spec remove_movie_like(integer, integer, String.t()) :: non_neg_integer
+  def remove_movie_like(like_id, movie_id, session_id) do
+    MovieLike
+    |> where(id: ^like_id, movie_id: ^movie_id, session_id: ^session_id)
+    |> Repo.delete_all()
 
-        {:liked, movie_likes_count(movie_id)}
-
-      like ->
-        Repo.delete!(like)
-        {:unliked, movie_likes_count(movie_id)}
-    end
+    movie_likes_count(movie_id)
   end
 
   @doc """

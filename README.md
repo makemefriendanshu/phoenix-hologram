@@ -52,7 +52,7 @@ Every page also has a "Theme" picker (top-right on `/`, in the nav bar on Hologr
 - `/premiere`, `/premiere/:id` — plays a movie, with:
   - live "who's in focus" voting: multiple named faces per scene, each showing its vote count, a "your vote" indicator, and the full per-vote timestamp history as a hover tooltip (voting identity is scoped to the page load, so refreshing lets you vote again) — laid out as the same compact, wrapping card grid as the admin scene-preview panel
   - comments (replies + likes), each poster naming themselves and shown with an avatar of their name's initial
-  - a like button (same per-page-load scoping as focus votes — each viewing can add one like, and refreshing resets the button so it's ready again, e.g. for a shared/kiosk screen)
+  - a like button — toggles liked/unliked within the current view, but (like focus votes) isn't remembered across reloads: refreshing always resets it to "ready to like", e.g. for a shared/kiosk screen, while the total count persists
   - a themed quality-picker dropdown (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown)
 
   Over the ngrok tunnel, large videos are bandwidth-capped (free tier), so playback can stall on multi-GB files — fine on localhost.

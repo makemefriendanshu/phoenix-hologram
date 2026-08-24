@@ -30,10 +30,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:session_id, session_id)
       |> put_state(:focus_session_id, focus_session_id)
       |> put_state(:movie_likes_count, (movie && Engagement.movie_likes_count(movie.id)) || 0)
-      |> put_state(
-        :movie_liked?,
-        (movie && Engagement.movie_liked?(movie.id, session_id)) || false
-      )
+      |> put_state(:movie_liked?, false)
+      |> put_state(:my_movie_like_id, nil)
       |> put_state(:comments, (movie && Engagement.list_comments(movie.id, session_id)) || [])
       |> put_state(:commenter_name, "")
       |> put_state(:new_comment_body, "")
@@ -300,10 +298,18 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     |> put_state(:reply_body, "")
   end
 
-  def action(:movie_like_toggled, params, component) do
+  def action(:movie_like_added, params, component) do
     component
     |> put_state(:movie_likes_count, params.count)
-    |> put_state(:movie_liked?, params.liked?)
+    |> put_state(:movie_liked?, true)
+    |> put_state(:my_movie_like_id, params.like_id)
+  end
+
+  def action(:movie_like_removed, params, component) do
+    component
+    |> put_state(:movie_likes_count, params.count)
+    |> put_state(:movie_liked?, false)
+    |> put_state(:my_movie_like_id, nil)
   end
 
   def action(:comment_added, params, component) do
@@ -366,9 +372,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     )
   end
 
-  def command(:like_movie, %{movie_id: movie_id}, server) do
-    {status, count} = Engagement.toggle_movie_like(movie_id, server.session_id)
-    put_action(server, :movie_like_toggled, count: count, liked?: status == :liked)
+  def command(:like_movie, %{movie_id: movie_id, like_id: nil}, server) do
+    {like_id, count} = Engagement.add_movie_like(movie_id, server.session_id)
+    put_action(server, :movie_like_added, count: count, like_id: like_id)
+  end
+
+  def command(:like_movie, %{movie_id: movie_id, like_id: like_id}, server) do
+    count = Engagement.remove_movie_like(like_id, movie_id, server.session_id)
+    put_action(server, :movie_like_removed, count: count)
   end
 
   def command(:add_comment, %{movie_id: movie_id, body: body, name: name}, server) do
@@ -563,7 +574,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
           <div class="mt-4 flex items-center gap-2">
             <button
-              $click={command: :like_movie, params: %{movie_id: @movie.id}}
+              $click={command: :like_movie, params: %{movie_id: @movie.id, like_id: @my_movie_like_id}}
               class={if @movie_liked? do "btn btn-sm btn-error" else "btn btn-sm btn-outline" end}
             >
               {%if @movie_liked?}♥ Liked{%else}♥ Like{/if}
