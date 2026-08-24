@@ -1,22 +1,39 @@
 defmodule PhoenixHologram.Engagement do
   @moduledoc """
-  Likes and comments for movies, and likes on those comments. A movie like
-  can be toggled on and off within a single page view (the page tracks the
-  id of the like it just added so it can remove that exact row again), but
-  that "liked" state isn't remembered across reloads - each fresh page load
-  starts unliked, regardless of past likes from that session. Comment likes
-  are keyed by (comment, session_id) instead, so clicking again within the
-  same session toggles it off rather than adding another one.
+  Likes, views, and comments for movies, and likes on those comments. A movie
+  like can be toggled on and off within a single page view (the page tracks
+  the id of the like it just added so it can remove that exact row again),
+  but that "liked" state isn't remembered across reloads - each fresh page
+  load starts unliked, regardless of past likes from that session. Comment
+  likes are keyed by (comment, session_id) instead, so clicking again within
+  the same session toggles it off rather than adding another one. Movie views
+  are recorded once per play (see PlayerPage's client-side play detection)
+  and simply accumulate - there's no undo, unlike likes.
   """
 
   import Ecto.Query
 
-  alias PhoenixHologram.Engagement.{Comment, CommentLike, MovieLike}
+  alias PhoenixHologram.Engagement.{Comment, CommentLike, MovieLike, MovieView}
   alias PhoenixHologram.Repo
 
   @spec movie_likes_count(integer) :: non_neg_integer
   def movie_likes_count(movie_id) do
     MovieLike |> where(movie_id: ^movie_id) |> Repo.aggregate(:count)
+  end
+
+  @spec movie_views_count(integer) :: non_neg_integer
+  def movie_views_count(movie_id) do
+    MovieView |> where(movie_id: ^movie_id) |> Repo.aggregate(:count)
+  end
+
+  @doc "Records a view of a movie for this session. Returns the new total view count."
+  @spec record_movie_view(integer, String.t()) :: non_neg_integer
+  def record_movie_view(movie_id, session_id) do
+    %MovieView{}
+    |> MovieView.changeset(%{movie_id: movie_id, session_id: session_id})
+    |> Repo.insert!()
+
+    movie_views_count(movie_id)
   end
 
   @doc "Adds a like to a movie. Returns {like_id, new_count} - keep like_id to unlike it again."

@@ -32,6 +32,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:movie_likes_count, (movie && Engagement.movie_likes_count(movie.id)) || 0)
       |> put_state(:movie_liked?, false)
       |> put_state(:my_movie_like_id, nil)
+      |> put_state(:movie_views_count, (movie && Engagement.movie_views_count(movie.id)) || 0)
       |> put_state(:comments, (movie && Engagement.list_comments(movie.id, session_id)) || [])
       |> put_state(:commenter_name, "")
       |> put_state(:new_comment_body, "")
@@ -201,6 +202,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     qualities |> Enum.find(&(&1.key == key)) |> Map.fetch!(:label)
   end
 
+  # The play-detection script reads the movie id off a data-* attribute,
+  # which the browser always hands back as a string.
+  defp to_movie_id(id) when is_integer(id), do: id
+  defp to_movie_id(id) when is_binary(id), do: String.to_integer(id)
+
   defp video_url(movie_id, quality), do: "/premiere/videos/#{movie_id}?quality=#{quality}"
 
   defp download_url(movie_id, quality),
@@ -316,6 +322,18 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     |> put_state(:my_movie_like_id, nil)
   end
 
+  # Dispatched from the inline script (see the setInterval block in the
+  # template) the first time it observes the video playing - guarded
+  # client-side so replaying/pausing the same movie doesn't record repeat
+  # views within one page load.
+  def action(:movie_played, params, component) do
+    put_command(component, :record_movie_view, movie_id: params.movie_id)
+  end
+
+  def action(:movie_view_recorded, params, component) do
+    put_state(component, :movie_views_count, params.count)
+  end
+
   def action(:comment_added, params, component) do
     component
     |> put_state(:comments, params.comments)
@@ -384,6 +402,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   def command(:like_movie, %{movie_id: movie_id, like_id: like_id}, server) do
     count = Engagement.remove_movie_like(like_id, movie_id, server.session_id)
     put_action(server, :movie_like_removed, count: count)
+  end
+
+  def command(:record_movie_view, %{movie_id: movie_id}, server) do
+    count = Engagement.record_movie_view(to_movie_id(movie_id), server.session_id)
+    put_action(server, :movie_view_recorded, count: count)
   end
 
   def command(:add_comment, %{movie_id: movie_id, body: body, name: name}, server) do
@@ -466,6 +489,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               <video
                 id="player-video"
                 data-scene-boundaries={@scene_boundaries_json}
+                data-movie-id={@movie.id}
                 controls
                 poster={@movie.thumbnail_url}
                 class="w-full rounded-box shadow-xl"
@@ -506,6 +530,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                   var staleToleranceMs = 5000;
                   var fastChangeThresholdMs = 1500;
                   var lastKey = "unset";
+                  var viewRecordedForMovieId = null;
 
                   function resolveSceneIndex(currentMs) {
                     var idx = -1;
@@ -548,6 +573,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                         scene_key: key,
                         fast_changing: isFastChanging(idx)
                       });
+                    }
+
+                    var movieId = video.dataset.movieId;
+                    if (!video.paused && viewRecordedForMovieId !== movieId) {
+                      viewRecordedForMovieId = movieId;
+                      Hologram.dispatchAction('movie_played', 'page', { movie_id: movieId });
                     }
                   }, 200);
                 })();
@@ -601,6 +632,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               {%if @movie_liked?}♥ Liked{%else}♥ Like{/if}
             </button>
             <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
+            <span class="text-sm text-base-content/50">· {@movie_views_count} view(s)</span>
           </div>
 
           <div class="mt-6 card card-stock shadow">

@@ -4,7 +4,7 @@ Elixir web app: Phoenix backend + [Hologram](https://www.hologram.page/) fronten
 
 ## Status
 
-🟡 Face-recognition premiere pipeline built end to end: ingest → cluster → admin scene browser → viewer page with live focus-voting, comments, and likes. Gaps: showtime scheduling and live broadcast of comments/likes (only focus-vote counts are pushed live).
+🟡 Face-recognition premiere pipeline built end to end: ingest → cluster → admin scene browser → viewer page with live focus-voting, comments, likes, and view counts. Gaps: showtime scheduling and live broadcast of comments/likes (only focus-vote counts are pushed live).
 
 ## Links
 
@@ -53,6 +53,7 @@ Every page also has a "Theme" picker (top-right on `/`, in the nav bar on Hologr
   - live "who's in focus" voting: multiple named faces per scene, each showing its vote count, a "your vote" indicator, and the full per-vote timestamp history as a hover tooltip (voting identity is scoped to the page load, so refreshing lets you vote again) — laid out as the same compact, wrapping card grid as the admin scene-preview panel; the panel label swaps to a "pause to vote" hint when scenes are cutting over too fast (< 1.5s apart) to reliably click a vote in time
   - comments (replies + likes), each poster naming themselves and shown with an avatar of their name's initial
   - a like button — toggles liked/unliked within the current view, but (like focus votes) isn't remembered across reloads: refreshing always resets it to "ready to like", e.g. for a shared/kiosk screen, while the total count persists
+  - a view count — recorded once per movie per page load, the first time playback actually starts (pausing/scrubbing/replaying doesn't add more)
   - a themed quality-picker dropdown (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown)
 
   Over the ngrok tunnel, large videos are bandwidth-capped (free tier), so playback can stall on multi-GB files — fine on localhost.
@@ -73,6 +74,7 @@ Every page also has a "Theme" picker (top-right on `/`, in the nav bar on Hologr
 | 9 | Live focus-voting + share-count tracking | 🟡 Focus voting is live (PubSub) and allows multiple faces per scene, with a "pause to vote" hint during fast scene cuts; share-count tracking not implemented |
 | 10 | Gold/cream wedding-invitation theme across all pages | ✅ Done — see [Theme](#theme) |
 | 11 | Selectable daisyUI theme picker on every page | ✅ Done — see [Theme](#theme) |
+| 12 | Movie view count | ✅ Done — recorded once per movie per page load, the first time playback starts |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
