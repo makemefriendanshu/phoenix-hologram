@@ -68,7 +68,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
               return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
             }
 
-            function setTheme(theme) {
+            function applyTheme(theme) {
               if (theme === 'system') {
                 localStorage.removeItem(STORAGE_KEY);
                 document.documentElement.setAttribute('data-theme', systemTheme());
@@ -80,12 +80,17 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
               }
             }
 
-            window.phSetTheme = setTheme;
-            setTheme(localStorage.getItem(STORAGE_KEY) || 'system');
+            window.phSetTheme = function (theme) {
+              applyTheme(theme);
+              // Close the theme dropdown: it stays open via CSS :focus-within,
+              // and clicking a menu item focuses it rather than clearing focus.
+              document.activeElement && document.activeElement.blur();
+            };
+            applyTheme(localStorage.getItem(STORAGE_KEY) || 'system');
 
             matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
               if (document.documentElement.getAttribute('data-theme-source') === 'system') {
-                setTheme('system');
+                applyTheme('system');
               }
             });
           })();
