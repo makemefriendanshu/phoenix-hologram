@@ -40,9 +40,13 @@ mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps preview pr
 
 ### Theme
 
-All Hologram pages (everything except `/`) share one `DefaultLayout` (`lib/phoenix_hologram_web/hologram/layouts/default_layout.ex`), which renders a "Shubh Vivaha" wedding-invitation banner — gold/cream palette, a Cinzel/Cormorant Garamond display face, a floral heart logo (`priv/static/images/logo.svg`) beside the identity band + nav, and a crossfading photo hero built from the ingested movies' thumbnails — above every page's own content, so it only has to be maintained in one place. `/` (the stock Phoenix landing page) gets the same gold/cream palette and background via `app.css`, styled independently since it isn't a Hologram page. The same logo doubles as the browser-tab favicon (`priv/static/favicon.svg`, with a rasterized `favicon.ico` fallback for browsers without SVG favicon support).
+All Hologram pages (everything except `/`) share one `DefaultLayout` (`lib/phoenix_hologram_web/hologram/layouts/default_layout.ex`), which renders a "Shubh Vivaha" wedding-invitation banner — gold/cream palette, a Cinzel/Cormorant Garamond display face, a floral heart logo (`priv/static/images/logo.svg`) beside the identity band + nav, and a crossfading photo hero built from the ingested movies' thumbnails — above every page's own content, so it only has to be maintained in one place. `/` (the stock Phoenix landing page) gets the same gold/cream palette and background via `app.css`, styled independently since it isn't a Hologram page. The same logo doubles as the browser-tab favicon (`priv/static/favicon.svg`, with a rasterized `favicon.ico` fallback for browsers without SVG favicon support) and as the browser-tab title, "Shubh Vivaha", on every page.
 
 Every page also has a "Theme" picker (top-right on `/`, in the nav bar on Hologram pages) listing all 35 daisyUI themes plus "System" — `light`/`dark` are the bespoke gold/cream and maroon/gold wedding palettes (`app.css`), the other 33 are daisyUI's stock presets. The full theme name list lives in `PhoenixHologramWeb.DaisyThemes`. The picked theme is stored under the `phx:theme` `localStorage` key, shared by `root.html.heex` and `DefaultLayout`, so it carries over between `/` and the Hologram pages.
+
+### Loading spinner
+
+Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — the wedding logo above a gold spinner ring — if the initial load is taking a moment, so a slow connection doesn't leave visitors staring at a blank tab. It's built and torn down entirely in an inline `<script>`/`<style>` placed ahead of the `app.css` `<link>` in `<head>` (a stylesheet blocks execution of any synchronous `<script>` after it, so the overlay has to come first to render before app.css itself has necessarily finished loading), revealed only after a short delay so a fast load never flashes it, and hidden once `window.load` fires. On Hologram pages it's appended outside `<body>` rather than declared in the page template, since the Hologram client runtime replaces its whole rendered DOM tree on mount and would otherwise wipe out the overlay's state.
 
 ### Pages
 
@@ -76,6 +80,7 @@ Every page also has a "Theme" picker (top-right on `/`, in the nav bar on Hologr
 | 11 | Selectable daisyUI theme picker on every page | ✅ Done — see [Theme](#theme) |
 | 12 | Movie view count | ✅ Done — recorded once per movie per page load, the first time playback starts |
 | 13 | Wedding logo + favicon | ✅ Done — see [Theme](#theme) |
+| 14 | Branded full-page loading spinner on slow initial loads | ✅ Done — see [Loading spinner](#loading-spinner) |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
