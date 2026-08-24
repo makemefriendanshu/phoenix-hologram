@@ -104,7 +104,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
           {/raw}
         </script>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Phoenix Hologram</title>
+        <title>Shubh Vivaha</title>
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="alternate icon" href="/favicon.ico" sizes="any" />
         <link rel="stylesheet" href="/assets/css/app.css" />
