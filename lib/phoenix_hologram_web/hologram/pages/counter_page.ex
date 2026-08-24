@@ -11,10 +11,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.CounterPage do
 
   def template do
     ~HOLO"""
-    <div class="min-h-screen flex items-center justify-center bg-base-200 p-6">
-      <div class="card w-full max-w-md bg-base-100 shadow-xl">
+    <div class="min-h-screen flex items-center justify-center p-6">
+      <div class="card w-full max-w-md card-stock shadow-xl">
         <div class="card-body items-center text-center">
-          <h1 class="card-title text-2xl">Hologram is wired up</h1>
+          <h1 class="card-title font-display text-2xl">Hologram is wired up</h1>
           <p class="text-sm text-base-content/70">
             This page is served through the Phoenix endpoint, but rendered and
             made interactive by Hologram — the click handler below runs

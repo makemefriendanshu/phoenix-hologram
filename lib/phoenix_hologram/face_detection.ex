@@ -78,6 +78,25 @@ defmodule PhoenixHologram.FaceDetection do
     |> Repo.update()
   end
 
+  @doc """
+  Every movie in display order: by `:position` (nulls last, so a movie
+  nobody has explicitly ordered still shows up instead of disappearing),
+  then `:id` as a stable tiebreaker. The single source of truth for movie
+  order across every listing (Premiere Hall, admin, the nav dropdowns) —
+  order here, not insertion/ingest order, which is an implementation
+  detail unrelated to the actual event sequence.
+  """
+  def list_movies_ordered do
+    Repo.all(
+      from m in Movie,
+        order_by: [
+          asc: fragment("CASE WHEN ? IS NULL THEN 1 ELSE 0 END", m.position),
+          asc: m.position,
+          asc: m.id
+        ]
+    )
+  end
+
   defp cleanup_frames([]), do: :ok
 
   defp cleanup_frames([%{path: path} | _]) do
