@@ -498,13 +498,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               </video>
 
               {%if length(@movie.qualities) > 1}
-                <div class="flex items-center gap-2 mt-2">
+                <div class="flex items-center gap-2 mt-2 flex-wrap">
                   <span class="text-xs text-base-content/60">Quality</span>
                   <div class="dropdown dropdown-bottom">
-                    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline h-auto py-2">
                       {@movie.selected_quality_label} ▾
                     </div>
-                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 p-2 shadow">
+                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 max-w-[calc(100vw-6rem)] p-2 shadow">
                       {%for quality <- @movie.qualities}
                         <li>
                           <a
@@ -640,13 +640,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               <h2 class="font-display text-sm mb-3">Download</h2>
 
               {%if length(@movie.qualities) > 1}
-                <div class="flex items-center gap-2 mb-3">
+                <div class="flex items-center gap-2 mb-3 flex-wrap">
                   <span class="text-xs text-base-content/60">Quality</span>
                   <div class="dropdown dropdown-bottom">
-                    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline h-auto py-2">
                       {@movie.selected_quality_label} ▾
                     </div>
-                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 p-2 shadow">
+                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 max-w-[calc(100vw-6rem)] p-2 shadow">
                       {%for quality <- @movie.qualities}
                         <li>
                           <a
