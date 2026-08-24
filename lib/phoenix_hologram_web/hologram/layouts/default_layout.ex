@@ -80,17 +80,24 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
               }
             }
 
-            window.phSetTheme = function (theme) {
-              applyTheme(theme);
-              // Close the theme dropdown: it stays open via CSS :focus-within,
-              // and clicking a menu item focuses it rather than clearing focus.
-              document.activeElement && document.activeElement.blur();
-            };
+            window.phSetTheme = applyTheme;
             applyTheme(localStorage.getItem(STORAGE_KEY) || 'system');
 
             matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
               if (document.documentElement.getAttribute('data-theme-source') === 'system') {
                 applyTheme('system');
+              }
+            });
+
+            // Every nav dropdown (Premiere Hall, Recognised Faces, Theme)
+            // stays open via CSS :focus-within, and clicking any item inside
+            // it — a movie <Link>, a plain <a>, or a theme button — focuses
+            // that item rather than clearing focus, so the menu never closes
+            // on its own. Blur whatever the click landed on, for any dropdown,
+            // regardless of whether the click also navigates or SPA-routes.
+            document.addEventListener('click', function (e) {
+              if (e.target.closest('.dropdown-content')) {
+                document.activeElement && document.activeElement.blur();
               }
             });
           })();
