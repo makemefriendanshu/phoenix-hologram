@@ -188,6 +188,31 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     put_state(component, :movie, %{component.state.movie | title: params.title})
   end
 
+  def action(:save_movie_details, params, component) do
+    put_command(component, :persist_movie_details,
+      movie_id: params.movie_id,
+      description: blank_to_nil(params.event["description"]),
+      event_date: blank_to_nil(params.event["event_date"]),
+      location: blank_to_nil(params.event["location"])
+    )
+  end
+
+  def action(:movie_details_saved, params, component) do
+    JS.exec("""
+    const details = document.getElementById('listing-details-details');
+    if (details) { details.open = false; }
+    """)
+
+    movie = %{
+      component.state.movie
+      | description: params.description,
+        event_date_input: params.event_date_input,
+        location: params.location
+    }
+
+    put_state(component, :movie, movie)
+  end
+
   # A movie can have thousands of detections and hundreds of scenes (see
   # SceneIndex.scenes/1), and this action runs on the client — rebuilding
   # every derived structure (scene_buckets, every face's totals) from the
@@ -382,6 +407,21 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     )
   end
 
+  def command(:persist_movie_details, params, server) do
+    {:ok, movie} =
+      FaceDetection.update_movie_details(params.movie_id, %{
+        description: params.description,
+        event_date: params.event_date,
+        location: params.location
+      })
+
+    put_action(server, :movie_details_saved,
+      description: movie.description,
+      event_date_input: date_to_input(movie.event_date),
+      location: movie.location
+    )
+  end
+
   def command(
         :cast_focus_vote,
         %{
@@ -503,9 +543,15 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
       id: movie.id,
       title: movie.title || movie.path,
       status: movie.status,
+      description: movie.description,
+      event_date_input: date_to_input(movie.event_date),
+      location: movie.location,
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail"
     }
   end
+
+  defp date_to_input(nil), do: ""
+  defp date_to_input(%Date{} = date), do: Date.to_iso8601(date)
 
   defp face_summary(face, scenes_list) do
     scenes =
@@ -618,6 +664,36 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                     value={@movie.title || ""}
                     placeholder="Movie name"
                     class="input input-xs input-bordered w-full max-w-xs"
+                  />
+                  <button type="submit" class="btn btn-xs btn-primary">Save</button>
+                </form>
+              </details>
+              <details id="listing-details-details" class="mt-2">
+                <summary class="text-xs cursor-pointer text-base-content/60">
+                  Edit listing details
+                </summary>
+                <form
+                  method="post"
+                  $submit={:save_movie_details, movie_id: @movie.id}
+                  class="flex flex-col gap-1 mt-1 max-w-xs"
+                >
+                  <textarea
+                    name="description"
+                    placeholder="Blurb shown on the movie card"
+                    class="textarea textarea-xs textarea-bordered w-full"
+                  >{@movie.description || ""}</textarea>
+                  <input
+                    type="date"
+                    name="event_date"
+                    value={@movie.event_date_input}
+                    class="input input-xs input-bordered w-full"
+                  />
+                  <input
+                    type="text"
+                    name="location"
+                    value={@movie.location || ""}
+                    placeholder="Location"
+                    class="input input-xs input-bordered w-full"
                   />
                   <button type="submit" class="btn btn-xs btn-primary">Save</button>
                 </form>

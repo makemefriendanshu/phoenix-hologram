@@ -79,6 +79,18 @@ defmodule PhoenixHologram.FaceDetection do
   end
 
   @doc """
+  Updates a movie's listing details (blurb, event date, location) shown on
+  its card in Premiere Hall and admin. Returns `{:ok, movie}` or
+  `{:error, changeset}`.
+  """
+  def update_movie_details(movie_id, attrs) do
+    Movie
+    |> Repo.get!(movie_id)
+    |> Movie.details_changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
   Every movie in display order: by `:position` (nulls last, so a movie
   nobody has explicitly ordered still shows up instead of disappearing),
   then `:id` as a stable tiebreaker. The single source of truth for movie

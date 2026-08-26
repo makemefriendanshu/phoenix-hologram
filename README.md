@@ -56,8 +56,9 @@ Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — 
 
 - `/` — landing page.
 - `/hologram` — Hologram demo page.
-- `/admin`, `/admin/movies/:id` — per-movie scene timeline and recognised faces (nameable, with thumbnails and timestamp ranges badged as playable clips, each carrying a focus-vote count that always matches the scene shown when clicked). The scene-preview modal shows the clip and the "who's in focus" voting panel side by side.
-- `/premiere`, `/premiere/:id` — plays a movie, with:
+- `/premiere`, `/admin` — the movie listing grid: title, thumbnail, and, once an admin has filled them in from `/admin/movies/:id`, a blurb plus a "date | location" line — in place of raw file metadata (resolution/size are still shown in the player's quality picker, see below).
+- `/admin`, `/admin/movies/:id` — per-movie scene timeline and recognised faces (nameable, with thumbnails and timestamp ranges badged as playable clips, each carrying a focus-vote count that always matches the scene shown when clicked). The scene-preview modal shows the clip and the "who's in focus" voting panel side by side. `/admin/movies/:id` also has an "Edit listing details" panel for that movie's blurb, event date, and location.
+- `/premiere/:id` — plays a movie, with:
   - live "who's in focus" voting: multiple named faces per scene, each showing its vote count, a "your vote" indicator, and the full per-vote timestamp history as a hover tooltip (voting identity is scoped to the page load, so refreshing lets you vote again) — laid out as the same compact, wrapping card grid as the admin scene-preview panel; the panel label swaps to a "pause to vote" hint when scenes are cutting over too fast (< 1.5s apart) to reliably click a vote in time
   - comments (replies + likes), each poster naming themselves and shown with an avatar of their name's initial
   - a like button — toggles liked/unliked within the current view, but (like focus votes) isn't remembered across reloads: refreshing always resets it to "ready to like", e.g. for a shared/kiosk screen, while the total count persists
@@ -85,6 +86,7 @@ Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — 
 | 12 | Movie view count | ✅ Done — recorded once per movie per page load, the first time playback starts |
 | 13 | Wedding logo + favicon | ✅ Done — see [Theme](#theme) |
 | 14 | Branded full-page loading spinner on slow initial loads | ✅ Done — see [Loading spinner](#loading-spinner) |
+| 15 | Admin-authored blurb + date/location on movie cards | ✅ Done — replaces the raw resolution/size line on `/premiere` and `/admin`; edited per movie from `/admin/movies/:id` |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
