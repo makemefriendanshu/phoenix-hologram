@@ -17,11 +17,17 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
   @hero_slide_count 4
   @hero_slide_seconds 5
 
-  def init(_props, component, server) do
+  # :home gets the "Transform Your Wedding Videos..." sales banner (with a
+  # CTA button); every other page keeps the original "Welcome to Shubh
+  # Vivaha" banner. Set via `layout DefaultLayout, banner: :home` on the page.
+  prop :banner, :atom, default: :default
+
+  def init(props, component, server) do
     movies = FaceDetection.list_movies_ordered()
 
     component =
       component
+      |> put_state(:banner, props.banner)
       |> put_state(:hero_images, build_hero_images(movies))
       |> put_state(:themes, PhoenixHologramWeb.DaisyThemes.themes())
       |> put_state(
@@ -194,113 +200,227 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
         <Runtime />
       </head>
       <body class="wedding-bg min-h-screen flex flex-col">
-        <div class="card-stock border-b border-primary/30 px-6 py-4">
-          <div class="max-w-5xl mx-auto flex items-start">
-            <div class="flex-1">
-              <a href="/">
-                <img src="/images/logo.svg" class="h-14 sm:h-16 w-auto" alt="Shubh Vivah" />
-              </a>
-            </div>
-            <div class="flex-1 text-center">
-              <a href="/" class="font-display text-3xl sm:text-4xl text-secondary tracking-wide">Shubh Vivaha</a>
-              <p class="text-xs italic text-base-content/60 -mt-1">(A sacred union)</p>
-            </div>
-            <div class="flex-1 text-right pt-2">
-              <span class="font-display text-[0.65rem] sm:text-xs tracking-[0.25em] uppercase text-primary">
-                Celebrating Forever
-              </span>
-            </div>
+        {%if @banner == :home}
+          <div class="bg-base-100 border-b-[6px] border-double border-primary px-4 sm:px-6 py-4 text-center overflow-x-hidden">
+            <a href="/" class="inline-flex flex-nowrap items-center justify-center gap-1 sm:gap-4">
+              <img src="/images/brass-lamp.png" class="hidden sm:block sm:h-28 w-auto shrink-0" alt="" aria-hidden="true" />
+              <img src="/images/home-logo.png" class="h-20 sm:h-36 w-auto shrink-0" alt="ShubhVivahs.com" />
+              <img src="/images/brass-lamp.png" class="hidden sm:block sm:h-28 w-auto shrink-0 scale-x-[-1]" alt="" aria-hidden="true" />
+            </a>
+            <p class="font-display text-[0.6rem] sm:text-xs tracking-[0.3em] uppercase text-primary font-semibold mt-1">
+              Your Digital Wedding Memory Platform
+            </p>
           </div>
-        </div>
 
-        <nav class="bg-gradient-to-r from-primary/60 via-primary to-primary/60 text-primary-content">
-          <div class="max-w-5xl mx-auto flex flex-wrap justify-center items-center gap-x-3 gap-y-1 py-2 px-4 text-[0.65rem] sm:text-xs font-display tracking-[0.15em] uppercase">
-            <div class="dropdown">
-              <div tabindex="0" role="button" class="hover:underline cursor-pointer">Premiere Hall ▾</div>
-              <ul
-                tabindex="0"
-                class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
-              >
-                <li>
-                  <a
-                    href="/premiere"
-                    class="font-display border-b border-primary-content/30 mb-1 hover:bg-secondary hover:text-primary-content"
-                  >
-                    All films
-                  </a>
-                </li>
-                {%for movie <- @nav_movies}
-                  <li>
-                    <Link
-                      to={PlayerPage, id: movie.id}
-                      class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content"
-                    >
-                      <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
-                      <span class="truncate">{movie.title}</span>
-                    </Link>
-                  </li>
-                {/for}
-              </ul>
-            </div>
-            <span class="opacity-50">|</span>
-            <div class="dropdown">
-              <div tabindex="0" role="button" class="hover:underline cursor-pointer">Recognised Faces ▾</div>
-              <ul
-                tabindex="0"
-                class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
-              >
-                <li>
-                  <a
-                    href="/admin"
-                    class="font-display border-b border-primary-content/30 mb-1 hover:bg-secondary hover:text-primary-content"
-                  >
-                    All films
-                  </a>
-                </li>
-                {%for movie <- @nav_movies}
-                  <li>
-                    <Link
-                      to={AdminMoviePage, id: movie.id}
-                      class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content"
-                    >
-                      <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
-                      <span class="truncate">{movie.title}</span>
-                    </Link>
-                  </li>
-                {/for}
-              </ul>
-            </div>
-            <span class="opacity-50">|</span>
-            <div class="dropdown dropdown-end">
-              <div tabindex="0" role="button" class="hover:underline cursor-pointer">Theme ▾</div>
-              <ul
-                tabindex="0"
-                class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-48 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
-              >
-                <li>
-                  <a
-                    onclick="phSetTheme('system')"
-                    class="cursor-pointer hover:bg-secondary hover:text-primary-content"
-                  >
-                    System
-                  </a>
-                </li>
-                {%for theme <- @themes}
+          <nav class="bg-primary text-secondary">
+            <div class="max-w-5xl mx-auto flex flex-wrap justify-center items-center gap-x-2 gap-y-1 py-2 px-4 text-[0.45rem] sm:text-xs font-display tracking-[0.05em] sm:tracking-[0.15em] uppercase">
+              <a href="/" class="hover:underline shrink-0">Home</a>
+              <span class="opacity-50 shrink-0">|</span>
+              <a href="/#how-it-works" class="hover:underline shrink-0">How It Works</a>
+              <span class="opacity-50 shrink-0">|</span>
+              <a href="/#celebrations" class="hover:underline shrink-0">View Core Example</a>
+              <span class="opacity-50 shrink-0">|</span>
+              <div class="dropdown shrink-0">
+                <div tabindex="0" role="button" class="hover:underline cursor-pointer">Feature Walkthrough ▾</div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-secondary rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+                >
                   <li>
                     <a
-                      onclick={"phSetTheme('#{theme}')"}
-                      class="capitalize cursor-pointer hover:bg-secondary hover:text-primary-content"
+                      href="/premiere"
+                      class="font-display border-b border-secondary/30 mb-1 hover:bg-secondary hover:text-primary-content"
                     >
-                      {theme}
+                      All films
                     </a>
                   </li>
-                {/for}
-              </ul>
+                  {%for movie <- @nav_movies}
+                    <li>
+                      <Link
+                        to={PlayerPage, id: movie.id}
+                        class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content"
+                      >
+                        <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
+                        <span class="truncate">{movie.title}</span>
+                      </Link>
+                    </li>
+                  {/for}
+                </ul>
+              </div>
+              <span class="opacity-50 shrink-0">|</span>
+              <a href="/#start-your-story" class="hover:underline shrink-0">Create Yours</a>
+              <span class="opacity-50 shrink-0">|</span>
+              <div class="dropdown shrink-0">
+                <div tabindex="0" role="button" class="hover:underline cursor-pointer">Recognised Faces ▾</div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-secondary rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+                >
+                  <li>
+                    <a
+                      href="/admin"
+                      class="font-display border-b border-secondary/30 mb-1 hover:bg-secondary hover:text-primary-content"
+                    >
+                      All films
+                    </a>
+                  </li>
+                  {%for movie <- @nav_movies}
+                    <li>
+                      <Link
+                        to={AdminMoviePage, id: movie.id}
+                        class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content"
+                      >
+                        <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
+                        <span class="truncate">{movie.title}</span>
+                      </Link>
+                    </li>
+                  {/for}
+                </ul>
+              </div>
+              <span class="opacity-50 shrink-0">|</span>
+              <div class="dropdown dropdown-end shrink-0">
+                <div tabindex="0" role="button" class="hover:underline cursor-pointer">Theme ▾</div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-secondary rounded-box z-20 mt-1 w-48 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+                >
+                  <li>
+                    <a
+                      onclick="phSetTheme('system')"
+                      class="cursor-pointer hover:bg-secondary hover:text-primary-content"
+                    >
+                      System
+                    </a>
+                  </li>
+                  {%for theme <- @themes}
+                    <li>
+                      <a
+                        onclick={"phSetTheme('#{theme}')"}
+                        class="capitalize cursor-pointer hover:bg-secondary hover:text-primary-content"
+                      >
+                        {theme}
+                      </a>
+                    </li>
+                  {/for}
+                </ul>
+              </div>
+            </div>
+          </nav>
+        {%else}
+          <div class="card-stock border-b border-primary/30 px-6 py-4">
+            <div class="max-w-5xl mx-auto flex items-start">
+              <div class="flex-1">
+                <a href="/">
+                  <img src="/images/logo.svg" class="h-14 sm:h-16 w-auto" alt="Shubh Vivah" />
+                </a>
+              </div>
+              <div class="flex-1 text-center">
+                <a href="/" class="font-display text-3xl sm:text-4xl text-secondary tracking-wide">Shubh Vivaha</a>
+                <p class="text-xs italic text-base-content/60 -mt-1">(A sacred union)</p>
+              </div>
+              <div class="flex-1 text-right pt-2">
+                <span class="font-display text-[0.65rem] sm:text-xs tracking-[0.25em] uppercase text-primary">
+                  Celebrating Forever
+                </span>
+              </div>
             </div>
           </div>
-        </nav>
 
-        <div class="relative h-64 sm:h-80 border-b-4 border-primary overflow-hidden">
+          <nav class="bg-gradient-to-r from-primary/60 via-primary to-primary/60 text-primary-content">
+            <div class="max-w-5xl mx-auto flex flex-wrap justify-center items-center gap-x-3 gap-y-1 py-2 px-4 text-[0.65rem] sm:text-xs font-display tracking-[0.15em] uppercase">
+              <div class="dropdown">
+                <div tabindex="0" role="button" class="hover:underline cursor-pointer">Premiere Hall ▾</div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+                >
+                  <li>
+                    <a
+                      href="/premiere"
+                      class="font-display border-b border-primary-content/30 mb-1 hover:bg-secondary hover:text-primary-content"
+                    >
+                      All films
+                    </a>
+                  </li>
+                  {%for movie <- @nav_movies}
+                    <li>
+                      <Link
+                        to={PlayerPage, id: movie.id}
+                        class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content"
+                      >
+                        <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
+                        <span class="truncate">{movie.title}</span>
+                      </Link>
+                    </li>
+                  {/for}
+                </ul>
+              </div>
+              <span class="opacity-50 shrink-0">|</span>
+              <div class="dropdown shrink-0">
+                <div tabindex="0" role="button" class="hover:underline cursor-pointer">Recognised Faces ▾</div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-64 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+                >
+                  <li>
+                    <a
+                      href="/admin"
+                      class="font-display border-b border-primary-content/30 mb-1 hover:bg-secondary hover:text-primary-content"
+                    >
+                      All films
+                    </a>
+                  </li>
+                  {%for movie <- @nav_movies}
+                    <li>
+                      <Link
+                        to={AdminMoviePage, id: movie.id}
+                        class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content"
+                      >
+                        <img src={movie.thumbnail_url} class="w-10 h-7 object-cover rounded shrink-0" />
+                        <span class="truncate">{movie.title}</span>
+                      </Link>
+                    </li>
+                  {/for}
+                </ul>
+              </div>
+              <span class="opacity-50 shrink-0">|</span>
+              <div class="dropdown dropdown-end shrink-0">
+                <div tabindex="0" role="button" class="hover:underline cursor-pointer">Theme ▾</div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content menu menu-sm bg-gradient-to-b from-primary to-primary/90 text-primary-content rounded-box z-20 mt-1 w-48 max-h-80 overflow-y-auto p-2 shadow normal-case tracking-normal text-left"
+                >
+                  <li>
+                    <a
+                      onclick="phSetTheme('system')"
+                      class="cursor-pointer hover:bg-secondary hover:text-primary-content"
+                    >
+                      System
+                    </a>
+                  </li>
+                  {%for theme <- @themes}
+                    <li>
+                      <a
+                        onclick={"phSetTheme('#{theme}')"}
+                        class="capitalize cursor-pointer hover:bg-secondary hover:text-primary-content"
+                      >
+                        {theme}
+                      </a>
+                    </li>
+                  {/for}
+                </ul>
+              </div>
+            </div>
+          </nav>
+        {/if}
+
+        <div class={
+          if @banner == :home do
+            "relative min-h-64 sm:min-h-80 border-b-4 border-primary overflow-hidden"
+          else
+            "relative h-64 sm:h-80 border-b-4 border-primary overflow-hidden"
+          end
+        }>
           {%if @hero_images == []}
             <div class="absolute inset-0 wedding-bg"></div>
           {%else}
@@ -309,16 +429,31 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
             {/for}
           {/if}
           <div class="absolute inset-0 bg-gradient-to-t from-secondary/85 via-secondary/15 to-transparent"></div>
-          <div class="absolute inset-x-0 bottom-0 px-6 pb-6 sm:pb-10 text-center">
-            <div class="inline-block border border-primary/80 px-6 py-4 sm:px-14 sm:py-6">
-              <p class="font-display text-primary-content text-base sm:text-2xl tracking-wide">
-                Welcome to Shubh Vivaha —
-              </p>
-              <p class="font-display text-primary-content/90 text-sm sm:text-xl mt-1">
-                Where Love Begins &amp; Tradition Flourishes
-              </p>
+
+          {%if @banner == :home}
+            <div class="relative px-6 py-8 sm:py-14 text-center">
+              <div class="inline-block border border-primary/80 px-6 py-4 sm:px-14 sm:py-6">
+                <p class="font-display text-primary-content text-base sm:text-2xl font-semibold tracking-wide text-balance">
+                  Transform Your Wedding Videos Into A Digital Keepsake.
+                </p>
+                <p class="font-display text-primary-content/90 text-xs sm:text-lg mt-2 text-balance">
+                  Ready to share your Shubh Vivaha videos?
+                </p>
+                <a href="/#celebrations" class="btn btn-primary btn-sm sm:btn-md mt-4">Get Service Like This</a>
+              </div>
             </div>
-          </div>
+          {%else}
+            <div class="absolute inset-x-0 bottom-0 px-6 pb-6 sm:pb-10 text-center">
+              <div class="inline-block border border-primary/80 px-6 py-4 sm:px-14 sm:py-6">
+                <p class="font-display text-primary-content text-base sm:text-2xl tracking-wide">
+                  Welcome to Shubh Vivaha —
+                </p>
+                <p class="font-display text-primary-content/90 text-sm sm:text-xl mt-1">
+                  Where Love Begins &amp; Tradition Flourishes
+                </p>
+              </div>
+            </div>
+          {/if}
         </div>
 
         <main id="page-content" class="flex-1">
