@@ -103,15 +103,104 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
           })();
           {/raw}
         </script>
+        <style>
+          {%raw}
+          /* Self-contained (no dependency on app.css, which can still be
+             loading) styling for the full-page loading overlay built by
+             the script below. Colors upgrade automatically to the active
+             daisyUI theme once app.css loads, via CSS variable fallbacks. */
+          .hologram-loading {
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            background-color: var(--color-base-100, #faf3e8);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+          }
+          .hologram-loading.is-visible {
+            opacity: 1;
+            pointer-events: auto;
+          }
+          .hologram-loading.is-hidden {
+            display: none;
+          }
+          .hologram-loading-logo {
+            height: 3.5rem;
+            width: auto;
+          }
+          .hologram-loading-spinner {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            border: 3px solid color-mix(in oklch, var(--color-primary, #c9932f) 25%, transparent);
+            border-top-color: var(--color-primary, #c9932f);
+            animation: hologram-loading-spin 0.8s linear infinite;
+          }
+          @keyframes hologram-loading-spin {
+            to { transform: rotate(360deg); }
+          }
+          {/raw}
+        </style>
+        <script>
+          {%raw}
+          (function () {
+            // Shows a full-page spinner once loading is taking a moment
+            // (revealed after a short delay so a fast load never flashes
+            // it), hidden once the page has fully loaded. Built and torn
+            // down entirely in JS, outside <body> — the rest of the page
+            // is a Hologram-managed component tree that gets wholly
+            // replaced once the client runtime mounts, which would wipe
+            // out any classes/state applied to a template-declared node.
+            var el = document.createElement('div');
+            el.id = 'hologram-loading';
+            el.className = 'hologram-loading';
+            el.setAttribute('role', 'status');
+            el.setAttribute('aria-live', 'polite');
+            el.innerHTML =
+              '<img src="/images/logo.svg" alt="Shubh Vivah" class="hologram-loading-logo" />' +
+              '<div class="hologram-loading-spinner"></div>';
+            document.documentElement.appendChild(el);
+
+            var revealTimer = setTimeout(function () {
+              el.classList.add('is-visible');
+            }, 250);
+
+            function hide() {
+              clearTimeout(revealTimer);
+              el.classList.remove('is-visible');
+              el.classList.add('is-hidden');
+              setTimeout(function () { el.remove(); }, 250);
+            }
+
+            if (document.readyState === 'complete') {
+              hide();
+            } else {
+              window.addEventListener('load', hide);
+            }
+          })();
+          {/raw}
+        </script>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Phoenix Hologram</title>
+        <title>Shubh Vivaha</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="alternate icon" href="/favicon.ico" sizes="any" />
         <link rel="stylesheet" href="/assets/css/app.css" />
         <Runtime />
       </head>
       <body class="wedding-bg min-h-screen flex flex-col">
         <div class="card-stock border-b border-primary/30 px-6 py-4">
           <div class="max-w-5xl mx-auto flex items-start">
-            <div class="flex-1"></div>
+            <div class="flex-1">
+              <a href="/">
+                <img src="/images/logo.svg" class="h-14 sm:h-16 w-auto" alt="Shubh Vivah" />
+              </a>
+            </div>
             <div class="flex-1 text-center">
               <a href="/" class="font-display text-3xl sm:text-4xl text-secondary tracking-wide">Shubh Vivaha</a>
               <p class="text-xs italic text-base-content/60 -mt-1">(A sacred union)</p>

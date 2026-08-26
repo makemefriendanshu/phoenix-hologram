@@ -32,6 +32,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:movie_likes_count, (movie && Engagement.movie_likes_count(movie.id)) || 0)
       |> put_state(:movie_liked?, false)
       |> put_state(:my_movie_like_id, nil)
+      |> put_state(:movie_views_count, (movie && Engagement.movie_views_count(movie.id)) || 0)
       |> put_state(:comments, (movie && Engagement.list_comments(movie.id, session_id)) || [])
       |> put_state(:commenter_name, "")
       |> put_state(:new_comment_body, "")
@@ -46,6 +47,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:scenes, scenes_by_key)
       |> put_state(:current_scene, find_current_scene(scenes_list, 0))
       |> put_state(:scene_boundaries_json, scene_boundaries_json(scenes_list))
+      |> put_state(:scene_changing_fast?, false)
 
     server = if movie, do: put_subscription(server, {:focus_votes, movie.id}), else: server
 
@@ -200,6 +202,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     qualities |> Enum.find(&(&1.key == key)) |> Map.fetch!(:label)
   end
 
+  # The play-detection script reads the movie id off a data-* attribute,
+  # which the browser always hands back as a string.
+  defp to_movie_id(id) when is_integer(id), do: id
+  defp to_movie_id(id) when is_binary(id), do: String.to_integer(id)
+
   defp video_url(movie_id, quality), do: "/premiere/videos/#{movie_id}?quality=#{quality}"
 
   defp download_url(movie_id, quality),
@@ -220,7 +227,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   # is an O(1) Map lookup rather than a scan through hundreds of scenes.
   def action(:scene_changed, params, component) do
     scene = Map.get(component.state.scenes, params.scene_key)
-    put_state(component, :current_scene, scene)
+
+    component
+    |> put_state(:current_scene, scene)
+    |> put_state(:scene_changing_fast?, Map.get(params, :fast_changing, false))
   end
 
   # Swapping `src` via plain JS (rather than just re-rendering the `src`
@@ -312,6 +322,18 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     |> put_state(:my_movie_like_id, nil)
   end
 
+  # Dispatched from the inline script (see the setInterval block in the
+  # template) the first time it observes the video playing - guarded
+  # client-side so replaying/pausing the same movie doesn't record repeat
+  # views within one page load.
+  def action(:movie_played, params, component) do
+    put_command(component, :record_movie_view, movie_id: params.movie_id)
+  end
+
+  def action(:movie_view_recorded, params, component) do
+    put_state(component, :movie_views_count, params.count)
+  end
+
   def action(:comment_added, params, component) do
     component
     |> put_state(:comments, params.comments)
@@ -380,6 +402,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   def command(:like_movie, %{movie_id: movie_id, like_id: like_id}, server) do
     count = Engagement.remove_movie_like(like_id, movie_id, server.session_id)
     put_action(server, :movie_like_removed, count: count)
+  end
+
+  def command(:record_movie_view, %{movie_id: movie_id}, server) do
+    count = Engagement.record_movie_view(to_movie_id(movie_id), server.session_id)
+    put_action(server, :movie_view_recorded, count: count)
   end
 
   def command(:add_comment, %{movie_id: movie_id, body: body, name: name}, server) do
@@ -462,6 +489,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               <video
                 id="player-video"
                 data-scene-boundaries={@scene_boundaries_json}
+                data-movie-id={@movie.id}
                 controls
                 poster={@movie.thumbnail_url}
                 class="w-full rounded-box shadow-xl"
@@ -470,13 +498,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               </video>
 
               {%if length(@movie.qualities) > 1}
-                <div class="flex items-center gap-2 mt-2">
+                <div class="flex items-center gap-2 mt-2 flex-wrap">
                   <span class="text-xs text-base-content/60">Quality</span>
                   <div class="dropdown dropdown-bottom">
-                    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline h-auto py-2">
                       {@movie.selected_quality_label} ▾
                     </div>
-                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 p-2 shadow">
+                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 max-w-[calc(100vw-6rem)] p-2 shadow">
                       {%for quality <- @movie.qualities}
                         <li>
                           <a
@@ -500,9 +528,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
                   var scenes = null;
                   var staleToleranceMs = 5000;
+                  var fastChangeThresholdMs = 1500;
                   var lastKey = "unset";
+                  var viewRecordedForMovieId = null;
 
-                  function resolveScene(currentMs) {
+                  function resolveSceneIndex(currentMs) {
                     var idx = -1;
                     for (var i = 0; i < scenes.length; i++) {
                       if (scenes[i].start_ms <= currentMs) {
@@ -511,9 +541,17 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                         break;
                       }
                     }
-                    if (idx === -1) { return null; }
-                    if (currentMs - scenes[idx].end_ms > staleToleranceMs) { return null; }
-                    return scenes[idx];
+                    if (idx === -1) { return -1; }
+                    if (currentMs - scenes[idx].end_ms > staleToleranceMs) { return -1; }
+                    return idx;
+                  }
+
+                  // A scene is "fast-changing" if the next one starts too soon
+                  // after it for a viewer to reliably click a vote before the
+                  // panel moves on — used to nudge them to pause instead.
+                  function isFastChanging(idx) {
+                    if (idx === -1 || idx + 1 >= scenes.length) { return false; }
+                    return (scenes[idx + 1].start_ms - scenes[idx].start_ms) < fastChangeThresholdMs;
                   }
 
                   setInterval(function () {
@@ -525,12 +563,22 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                     }
 
                     var currentMs = Math.round(video.currentTime * 1000);
-                    var scene = resolveScene(currentMs);
+                    var idx = resolveSceneIndex(currentMs);
+                    var scene = idx === -1 ? null : scenes[idx];
                     var key = scene ? (scene.start_ms + ":" + scene.end_ms) : "none";
 
                     if (key !== lastKey) {
                       lastKey = key;
-                      Hologram.dispatchAction('scene_changed', 'page', { scene_key: key });
+                      Hologram.dispatchAction('scene_changed', 'page', {
+                        scene_key: key,
+                        fast_changing: isFastChanging(idx)
+                      });
+                    }
+
+                    var movieId = video.dataset.movieId;
+                    if (!video.paused && viewRecordedForMovieId !== movieId) {
+                      viewRecordedForMovieId = movieId;
+                      Hologram.dispatchAction('movie_played', 'page', { movie_id: movieId });
                     }
                   }, 200);
                 })();
@@ -547,7 +595,11 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                   {%else}
                     <div class="flex items-center gap-2 mb-2">
                       <span class="badge badge-outline whitespace-nowrap">{@current_scene.time}</span>
-                      <span class="text-xs text-base-content/60">Vote live for who's on screen</span>
+                      {%if @scene_changing_fast?}
+                        <span class="text-xs text-warning truncate">⏸ Changing fast — pause to vote</span>
+                      {%else}
+                        <span class="text-xs text-base-content/60 truncate">Vote live for who's on screen</span>
+                      {/if}
                     </div>
                     <div class="flex-1 min-h-0 flex flex-wrap gap-2 overflow-y-auto content-start">
                       {%for face <- @current_scene.faces}
@@ -580,6 +632,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               {%if @movie_liked?}♥ Liked{%else}♥ Like{/if}
             </button>
             <span class="text-sm text-base-content/70">{@movie_likes_count} like(s)</span>
+            <span class="text-sm text-base-content/50">· {@movie_views_count} view(s)</span>
           </div>
 
           <div class="mt-6 card card-stock shadow">
@@ -587,13 +640,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               <h2 class="font-display text-sm mb-3">Download</h2>
 
               {%if length(@movie.qualities) > 1}
-                <div class="flex items-center gap-2 mb-3">
+                <div class="flex items-center gap-2 mb-3 flex-wrap">
                   <span class="text-xs text-base-content/60">Quality</span>
                   <div class="dropdown dropdown-bottom">
-                    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline h-auto py-2">
                       {@movie.selected_quality_label} ▾
                     </div>
-                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 p-2 shadow">
+                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-64 max-w-[calc(100vw-6rem)] p-2 shadow">
                       {%for quality <- @movie.qualities}
                         <li>
                           <a
@@ -672,19 +725,19 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 {%for comment <- @comments}
                   <div class="card card-stock shadow">
                     <div class="card-body py-3">
-                      <div class="flex items-start gap-3">
+                      <div class="flex items-start gap-2 sm:gap-3">
                         <div class="avatar avatar-placeholder shrink-0">
-                          <div class="bg-neutral text-neutral-content rounded-full w-8">
+                          <div class="bg-neutral text-neutral-content rounded-full w-6 sm:w-8">
                             <span class="text-xs">{comment.author_initial}</span>
                           </div>
                         </div>
                         <div class="flex-1 min-w-0">
-                          <div class="flex items-center justify-between">
+                          <div class="flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
                             <div class="min-w-0">
                               <p class="text-xs font-semibold text-base-content/80">{comment.author_name}</p>
                               <p class="text-sm">{comment.body}</p>
                             </div>
-                            <div class="flex items-center gap-2 shrink-0 ml-3">
+                            <div class="flex items-center gap-2 shrink-0">
                               <button
                                 $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: comment.id}}
                                 class={if comment.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}
@@ -730,20 +783,20 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                           </form>
 
                           {%if comment.replies != []}
-                            <div class="flex flex-col gap-3 mt-3 ml-6 border-l-2 border-base-300 pl-3">
+                            <div class="flex flex-col gap-3 mt-3 ml-2 sm:ml-6 border-l-2 border-base-300 pl-1.5 sm:pl-3">
                               {%for reply <- comment.replies}
-                                <div class="flex items-start gap-2">
+                                <div class="flex items-start gap-1 sm:gap-2">
                                   <div class="avatar avatar-placeholder shrink-0">
-                                    <div class="bg-neutral text-neutral-content rounded-full w-6">
+                                    <div class="bg-neutral text-neutral-content rounded-full w-5 sm:w-6">
                                       <span class="text-[0.65rem]">{reply.author_initial}</span>
                                     </div>
                                   </div>
-                                  <div class="flex-1 min-w-0 flex items-center justify-between">
+                                  <div class="flex-1 min-w-0 flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
                                     <div class="min-w-0">
                                       <p class="text-xs font-semibold text-base-content/80">{reply.author_name}</p>
-                                      <p class="text-sm">{reply.body}</p>
+                                      <p class="text-xs sm:text-sm">{reply.body}</p>
                                     </div>
-                                    <div class="flex items-center gap-2 shrink-0 ml-3">
+                                    <div class="flex items-center gap-2 shrink-0">
                                       <button
                                         $click={command: :like_comment, params: %{movie_id: @movie.id, comment_id: reply.id}}
                                         class={if reply.liked? do "btn btn-xs btn-error" else "btn btn-xs btn-ghost" end}

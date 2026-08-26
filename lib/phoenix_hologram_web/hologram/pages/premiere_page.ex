@@ -3,7 +3,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PremierePage do
 
   alias Hologram.UI.Link
   alias PhoenixHologram.FaceDetection
-  alias PhoenixHologram.VideoMetadata
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
   alias PhoenixHologramWeb.Hologram.Pages.PlayerPage
 
@@ -20,16 +19,25 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PremierePage do
   end
 
   defp build_card(movie) do
-    metadata = VideoMetadata.fetch(movie)
-
     %{
       id: movie.id,
       title: movie.title || movie.path,
       status: movie.status,
-      description: VideoMetadata.describe(metadata),
+      description: movie.description,
+      event_line: format_event_line(movie),
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail"
     }
   end
+
+  defp format_event_line(movie) do
+    case [format_event_date(movie.event_date), movie.location] |> Enum.reject(&is_nil/1) do
+      [] -> nil
+      parts -> Enum.join(parts, " | ")
+    end
+  end
+
+  defp format_event_date(nil), do: nil
+  defp format_event_date(date), do: date |> Calendar.strftime("%d %b %Y") |> String.upcase()
 
   def template do
     ~HOLO"""
@@ -70,7 +78,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PremierePage do
                   </Link>
                   <div class="card-body items-center text-center">
                     <h2 class="card-title font-display">{movie.title}</h2>
-                    <p class="text-sm text-base-content/70">{movie.description}</p>
+                    {%if movie.description}
+                      <p class="text-sm text-base-content/70">{movie.description}</p>
+                    {/if}
+                    {%if movie.event_line}
+                      <p class="text-xs tracking-wide text-base-content/50">{movie.event_line}</p>
+                    {/if}
                     <div class="flex flex-wrap justify-center gap-2 mt-2">
                       <Link to={PlayerPage, id: movie.id} class="btn btn-sm btn-primary">
                         View Video ▶
