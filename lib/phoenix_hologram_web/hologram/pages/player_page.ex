@@ -242,11 +242,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     |> put_state(:scene_changing_fast?, Map.get(params, :fast_changing, false))
   end
 
-  # Dispatched from the inline script's "ended"/"play" listeners on the
-  # video element, so the end-of-video overlay (next/previous/replay) shows
-  # up when playback finishes and clears again as soon as it resumes —
-  # whether resumed via our own overlay buttons or the browser's own replay
-  # control, since both end up firing a native "play" event either way.
+  # Dispatched from the same polling interval that tracks scene changes,
+  # rather than an "ended"/"play" event listener attached once: Hologram's
+  # own client-side render replaces the <video> DOM node shortly after page
+  # load, which would silently orphan a listener bound directly to it. The
+  # interval already re-queries the element fresh on every tick, so it stays
+  # correct regardless of node replacement.
   def action(:video_ended, _params, component) do
     put_state(component, :video_ended?, true)
   end
@@ -310,8 +311,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     const video = document.getElementById('player-video');
     if (video) {
       video.src = #{inspect(new_video_url)};
-      video.currentTime = 0;
-      video.play().catch(() => {});
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }, { once: true });
     }
     """)
 
@@ -330,8 +333,10 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     const video = document.getElementById('player-video');
     if (video) {
       video.src = #{inspect(new_video_url)};
-      video.currentTime = 0;
-      video.play().catch(() => {});
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }, { once: true });
     }
     """)
 
@@ -673,16 +678,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                   var fastChangeThresholdMs = 1500;
                   var lastKey = "unset";
                   var viewRecordedForMovieId = null;
-
-                  var initialVideo = document.getElementById('player-video');
-                  if (initialVideo) {
-                    initialVideo.addEventListener('ended', function () {
-                      Hologram.dispatchAction('video_ended', 'page', {});
-                    });
-                    initialVideo.addEventListener('play', function () {
-                      Hologram.dispatchAction('video_playing', 'page', {});
-                    });
-                  }
+                  var wasEnded = false;
 
                   function resolveSceneIndex(currentMs) {
                     var idx = -1;
@@ -731,6 +727,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                     if (!video.paused && viewRecordedForMovieId !== movieId) {
                       viewRecordedForMovieId = movieId;
                       Hologram.dispatchAction('movie_played', 'page', { movie_id: movieId });
+                    }
+
+                    if (video.ended && !wasEnded) {
+                      wasEnded = true;
+                      Hologram.dispatchAction('video_ended', 'page', {});
+                    } else if (!video.ended && wasEnded) {
+                      wasEnded = false;
+                      Hologram.dispatchAction('video_playing', 'page', {});
                     }
                   }, 200);
                 })();
