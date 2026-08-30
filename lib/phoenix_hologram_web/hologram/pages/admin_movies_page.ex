@@ -29,11 +29,17 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
           face_count: length(movie.faces),
           description: movie.description,
           event_line: format_event_line(movie),
-          thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail"
+          thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail",
+          highlight?: highlight_card?(movie)
         }
       end)
 
     put_state(component, :movies, movies)
+  end
+
+  defp highlight_card?(movie) do
+    title = movie.title || ""
+    String.contains?(String.downcase(title), "happy birthday")
   end
 
   defp format_event_line(movie) do
@@ -77,23 +83,49 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
           {%else}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {%for movie <- @movies}
-                <div class="card card-stock shadow-xl hover:shadow-2xl transition overflow-hidden">
+                <div class={
+                  if movie.highlight? do
+                    "card sm:col-span-2 border-2 border-primary bg-secondary text-secondary-content shadow-xl hover:shadow-2xl transition overflow-hidden"
+                  else
+                    "card card-stock shadow-xl hover:shadow-2xl transition overflow-hidden"
+                  end
+                }>
                   <Link to={AdminMoviePage, id: movie.id}>
                     <figure class="aspect-video bg-base-300">
                       <img src={movie.thumbnail_url} alt={movie.title} class="w-full h-full object-cover" />
                     </figure>
                   </Link>
                   <div class="card-body items-center text-center">
-                    <h2 class="card-title font-display">{movie.title}</h2>
+                    <h2 class="card-title font-display">
+                      <Link to={PlayerPage, id: movie.id} class="hover:underline">{movie.title}</Link>
+                    </h2>
                     {%if movie.description}
-                      <p class="text-sm text-base-content/70">{movie.description}</p>
+                      <p class={
+                        if movie.highlight? do
+                          "text-sm text-secondary-content/80"
+                        else
+                          "text-sm text-base-content/70"
+                        end
+                      }>{movie.description}</p>
                     {/if}
                     {%if movie.event_line}
-                      <p class="text-xs tracking-wide text-base-content/50">{movie.event_line}</p>
+                      <p class={
+                        if movie.highlight? do
+                          "text-xs tracking-wide text-secondary-content/70"
+                        else
+                          "text-xs tracking-wide text-base-content/50"
+                        end
+                      }>{movie.event_line}</p>
                     {/if}
                     <div class="flex gap-2">
                       <span class="badge badge-outline badge-primary">{movie.status}</span>
-                      <span class="badge badge-secondary">{movie.face_count} face(s)</span>
+                      <span class={
+                        if movie.highlight? do
+                          "badge badge-primary"
+                        else
+                          "badge badge-secondary"
+                        end
+                      }>{movie.face_count} face(s)</span>
                     </div>
                     <div class="flex flex-wrap justify-center gap-2 mt-2">
                       <Link to={AdminMoviePage, id: movie.id} class="btn btn-sm btn-secondary">
