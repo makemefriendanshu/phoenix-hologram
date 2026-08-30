@@ -242,9 +242,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.HomePage do
         </div>
       </div>
 
-      <div class="pb-10 px-6 text-center">
-        <p class="font-display text-lg text-secondary italic max-w-xl mx-auto text-balance">
-          "Our digital memory timeline is a family treasure!"
+      <div class="bg-secondary text-secondary-content py-8 px-6 text-center">
+        <p class="font-display text-lg sm:text-xl italic max-w-xl mx-auto text-balance">
+          <span class="text-primary not-italic">&ldquo;</span>Our digital memory timeline is a family treasure!<span class="text-primary not-italic">&rdquo;</span>
         </p>
       </div>
     </div>
