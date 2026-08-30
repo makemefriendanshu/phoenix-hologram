@@ -48,6 +48,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:current_scene, find_current_scene(scenes_list, 0))
       |> put_state(:scene_boundaries_json, scene_boundaries_json(scenes_list))
       |> put_state(:scene_changing_fast?, false)
+      |> put_state(:video_ended?, false)
 
     server = if movie, do: put_subscription(server, {:focus_votes, movie.id}), else: server
 
@@ -239,6 +240,19 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     component
     |> put_state(:current_scene, scene)
     |> put_state(:scene_changing_fast?, Map.get(params, :fast_changing, false))
+  end
+
+  # Dispatched from the inline script's "ended"/"play" listeners on the
+  # video element, so the end-of-video overlay (next/previous/replay) shows
+  # up when playback finishes and clears again as soon as it resumes —
+  # whether resumed via our own overlay buttons or the browser's own replay
+  # control, since both end up firing a native "play" event either way.
+  def action(:video_ended, _params, component) do
+    put_state(component, :video_ended?, true)
+  end
+
+  def action(:video_playing, _params, component) do
+    put_state(component, :video_ended?, false)
   end
 
   # Swapping `src` via plain JS (rather than just re-rendering the `src`
@@ -533,16 +547,68 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
           <div class="relative flex flex-col lg:flex-row gap-4">
             <div class="flex-1 min-w-0 lg:pr-[25rem]">
-              <video
-                id="player-video"
-                data-scene-boundaries={@scene_boundaries_json}
-                data-movie-id={@movie.id}
-                controls
-                poster={@movie.thumbnail_url}
-                class="w-full rounded-box shadow-xl"
-                src={@movie.video_url}
-              >
-              </video>
+              <div class="relative">
+                <video
+                  id="player-video"
+                  data-scene-boundaries={@scene_boundaries_json}
+                  data-movie-id={@movie.id}
+                  controls
+                  poster={@movie.thumbnail_url}
+                  class="w-full rounded-box shadow-xl"
+                  src={@movie.video_url}
+                >
+                </video>
+
+                {%if @video_ended?}
+                  <div class="absolute inset-0 flex items-center justify-center bg-black/70 rounded-box">
+                    <div class="flex flex-col items-center gap-3 p-4">
+                      <p class="text-white text-sm font-display">
+                        {%if @movie.selected_part}Part {@movie.selected_part} finished{%else}Video finished{/if}
+                      </p>
+                      <div class="flex flex-wrap justify-center gap-2">
+                        {%if @movie.selected_part && @movie.selected_part > 1}
+                          <button
+                            $click={:play_part, part: @movie.selected_part - 1}
+                            class="btn btn-sm btn-outline"
+                          >
+                            ◀ Previous part
+                          </button>
+                        {/if}
+
+                        {%if @movie.selected_part}
+                          <button
+                            $click={:play_part, part: @movie.selected_part}
+                            class="btn btn-sm btn-primary"
+                          >
+                            ↻ Replay
+                          </button>
+                        {%else}
+                          <button $click="play_full" class="btn btn-sm btn-primary">
+                            ↻ Replay
+                          </button>
+                        {/if}
+
+                        {%if @movie.selected_part}
+                          {%if @movie.selected_part < @movie.segment_count}
+                            <button
+                              $click={:play_part, part: @movie.selected_part + 1}
+                              class="btn btn-sm btn-outline"
+                            >
+                              Next part ▶
+                            </button>
+                          {/if}
+                        {%else}
+                          {%if @movie.segment_count > 0}
+                            <button $click={:play_part, part: 1} class="btn btn-sm btn-outline">
+                              Play in parts ▶
+                            </button>
+                          {/if}
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+              </div>
 
               {%if length(@movie.qualities) > 1}
                 <div class="flex items-center gap-2 mt-2 flex-wrap">
@@ -607,6 +673,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                   var fastChangeThresholdMs = 1500;
                   var lastKey = "unset";
                   var viewRecordedForMovieId = null;
+
+                  var initialVideo = document.getElementById('player-video');
+                  if (initialVideo) {
+                    initialVideo.addEventListener('ended', function () {
+                      Hologram.dispatchAction('video_ended', 'page', {});
+                    });
+                    initialVideo.addEventListener('play', function () {
+                      Hologram.dispatchAction('video_playing', 'page', {});
+                    });
+                  }
 
                   function resolveSceneIndex(currentMs) {
                     var idx = -1;
