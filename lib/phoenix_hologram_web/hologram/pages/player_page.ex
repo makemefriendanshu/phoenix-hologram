@@ -478,7 +478,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
           <h1 class="font-display text-2xl mt-4 mb-1">{@movie.title}</h1>
           <div class="flex items-center gap-3 mb-4">
             <p class="text-sm text-base-content/70">{@movie.description}</p>
-            <span class="badge badge-outline badge-primary">{@movie.status}</span>
             <Link to={AdminMoviePage, id: @movie.id} class="btn btn-xs btn-secondary">
               Admin View ⚙
             </Link>
