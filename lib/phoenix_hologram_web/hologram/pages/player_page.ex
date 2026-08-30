@@ -169,7 +169,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       segment_count: length(segment_downloads),
       qualities: qualities,
       selected_quality: selected_quality,
-      selected_quality_label: quality_label(qualities, selected_quality)
+      selected_quality_label: quality_label(qualities, selected_quality),
+      selected_part: nil
     }
   end
 
@@ -216,9 +217,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     segment_count = movie |> VideoSegments.ensure_generated!(quality) |> length()
 
     Enum.map(1..segment_count, fn part ->
-      %{part: part, url: "/premiere/videos/#{movie.id}/download/#{part}?quality=#{quality}"}
+      %{
+        part: part,
+        url: "/premiere/videos/#{movie.id}/download/#{part}?quality=#{quality}",
+        play_url: play_url(movie.id, quality, part)
+      }
     end)
   end
+
+  defp play_url(movie_id, quality, part),
+    do: "/premiere/videos/#{movie_id}/play/#{part}?quality=#{quality}"
 
   # Dispatched from plain JS (see the inline script in the template) only
   # when the resolved scene key actually changes — not on every tick — so
@@ -271,9 +279,49 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       | video_url: new_video_url,
         download_url: new_download_url,
         selected_quality: quality,
-        selected_quality_label: quality_label(component.state.movie.qualities, quality)
+        selected_quality_label: quality_label(component.state.movie.qualities, quality),
+        selected_part: nil
     })
     |> put_command(:switch_download_quality, movie_id: movie_id, quality: quality)
+  end
+
+  # Jumps playback straight to one segment instead of the full video, so a
+  # viewer on a slow connection can start watching a later part immediately
+  # rather than waiting for (or re-buffering through) everything before it.
+  def action(:play_part, params, component) do
+    movie = component.state.movie
+    new_video_url = play_url(movie.id, movie.selected_quality, params.part)
+
+    JS.exec("""
+    const video = document.getElementById('player-video');
+    if (video) {
+      video.src = #{inspect(new_video_url)};
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }
+    """)
+
+    put_state(component, :movie, %{
+      movie
+      | video_url: new_video_url,
+        selected_part: params.part
+    })
+  end
+
+  def action(:play_full, _params, component) do
+    movie = component.state.movie
+    new_video_url = video_url(movie.id, movie.selected_quality)
+
+    JS.exec("""
+    const video = document.getElementById('player-video');
+    if (video) {
+      video.src = #{inspect(new_video_url)};
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }
+    """)
+
+    put_state(component, :movie, %{movie | video_url: new_video_url, selected_part: nil})
   end
 
   def action(:segment_downloads_updated, params, component) do
@@ -516,6 +564,35 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       {/for}
                     </ul>
                   </div>
+                </div>
+              {/if}
+
+              {%if @movie.segment_count > 0}
+                <div class="flex items-center gap-2 mt-2 flex-wrap">
+                  <span class="text-xs text-base-content/60">Play in parts</span>
+                  <div class="dropdown dropdown-bottom">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline h-auto py-2">
+                      {%if @movie.selected_part}Part {@movie.selected_part}{%else}Full video{/if} ▾
+                    </div>
+                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-44 max-w-[calc(100vw-6rem)] p-2 shadow">
+                      <li>
+                        <a $click="play_full" class={if @movie.selected_part == nil do "active" else "" end}>
+                          Full video
+                        </a>
+                      </li>
+                      {%for segment <- @movie.segment_downloads}
+                        <li>
+                          <a
+                            $click={:play_part, part: segment.part}
+                            class={if @movie.selected_part == segment.part do "active" else "" end}
+                          >
+                            Part {segment.part}
+                          </a>
+                        </li>
+                      {/for}
+                    </ul>
+                  </div>
+                  <span class="text-xs text-base-content/50">Jump in without waiting for the whole video</span>
                 </div>
               {/if}
 
