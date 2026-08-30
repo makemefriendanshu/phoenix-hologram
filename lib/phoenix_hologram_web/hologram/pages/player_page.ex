@@ -112,7 +112,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         end_ms: scene.end_ms,
         time: format_scene(scene),
         faces:
-          Enum.map(scene.face_ids, fn face_id ->
+          scene.face_ids
+          |> Enum.map(fn face_id ->
             face_votes = Map.get(votes_by_face, face_id, [])
 
             %{
@@ -124,8 +125,17 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               voted_ats: face_votes |> voted_ats() |> Enum.map(&format_timestamp/1)
             }
           end)
+          |> mark_leading()
       }
     end)
+  end
+
+  # Flags every face tied for the most votes so the panel can badge them
+  # all; an all-zero scene marks no one as leading.
+  defp mark_leading(faces) do
+    max_votes = faces |> Enum.map(& &1.votes) |> Enum.reduce(0, &max/2)
+
+    Enum.map(faces, &Map.put(&1, :leading?, max_votes > 0 and &1.votes == max_votes))
   end
 
   defp format_scene(%{start_ms: start_ms, end_ms: end_ms}) do
@@ -254,6 +264,25 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
   def action(:video_playing, _params, component) do
     put_state(component, :video_ended?, false)
+  end
+
+  # Pausing here (rather than leaving the vote button's $click as a plain
+  # command) keeps the voter from missing the scene while `cast_focus_vote`
+  # makes its round trip — playback resumes once :focus_vote_updated
+  # confirms this client's own vote was saved.
+  def action(:focus_vote_clicked, params, component) do
+    JS.exec("""
+    const video = document.getElementById('player-video');
+    if (video) { video.pause(); }
+    """)
+
+    put_command(component, :cast_focus_vote,
+      movie_id: params.movie_id,
+      scene_start_ms: params.scene_start_ms,
+      scene_end_ms: params.scene_end_ms,
+      face_id: params.face_id,
+      voter_id: params.voter_id
+    )
   end
 
   # Swapping `src` via plain JS (rather than just re-rendering the `src`
@@ -426,7 +455,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     scenes =
       Map.update!(component.state.scenes, key, fn scene ->
         faces =
-          Enum.map(scene.faces, fn face ->
+          scene.faces
+          |> Enum.map(fn face ->
             votes = Map.get(params.counts, face.id, 0)
             voted_ats = params.voted_ats |> Map.get(face.id, []) |> Enum.map(&format_timestamp/1)
 
@@ -435,6 +465,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
             %{face | votes: votes, mine?: mine?, voted_ats: voted_ats}
           end)
+          |> mark_leading()
 
         %{scene | faces: faces}
       end)
@@ -447,6 +478,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         other ->
           other
       end
+
+    JS.exec("""
+    if (#{is_mine}) {
+      const video = document.getElementById('player-video');
+      if (video) { video.play().catch(() => {}); }
+    }
+    """)
 
     component
     |> put_state(:scenes, scenes)
@@ -760,13 +798,17 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                     <div class="flex-1 min-h-0 flex flex-wrap gap-2 overflow-y-auto content-start">
                       {%for face <- @current_scene.faces}
                         <button
-                          $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
+                          $click={:focus_vote_clicked, movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}
                           title={Enum.join(face.voted_ats, "\n")}
                           class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                         >
                           <img src={face.thumbnail_url} class="w-10 h-10 rounded-full object-cover shrink-0" />
                           <span class="text-xs normal-case text-left leading-tight">
-                            {face.label}<br />{face.votes} vote(s)
+                            {face.label}
+                            {%if face.leading?}
+                              <span class="badge badge-secondary badge-xs align-middle gap-1">🏆 leading</span>
+                            {/if}
+                            <br />{face.votes} vote(s)
                             {%if face.mine?}
                               <span class="block font-semibold">✓ your vote</span>
                             {/if}
