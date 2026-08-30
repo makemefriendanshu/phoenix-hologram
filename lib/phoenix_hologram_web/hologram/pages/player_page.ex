@@ -574,7 +574,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                         {%if @movie.selected_part && @movie.selected_part > 1}
                           <button
                             $click={:play_part, part: @movie.selected_part - 1}
-                            class="btn btn-sm btn-outline"
+                            class="btn btn-sm btn-outline btn-primary bg-black/40"
                           >
                             ◀ Previous part
                           </button>
@@ -583,12 +583,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                         {%if @movie.selected_part}
                           <button
                             $click={:play_part, part: @movie.selected_part}
-                            class="btn btn-sm btn-primary"
+                            class="btn btn-sm btn-outline btn-primary bg-black/40"
                           >
                             ↻ Replay
                           </button>
                         {%else}
-                          <button $click="play_full" class="btn btn-sm btn-primary">
+                          <button $click="play_full" class="btn btn-sm btn-outline btn-primary bg-black/40">
                             ↻ Replay
                           </button>
                         {/if}
@@ -597,14 +597,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                           {%if @movie.selected_part < @movie.segment_count}
                             <button
                               $click={:play_part, part: @movie.selected_part + 1}
-                              class="btn btn-sm btn-outline"
+                              class="btn btn-sm btn-primary"
                             >
                               Next part ▶
                             </button>
                           {/if}
                         {%else}
                           {%if @movie.segment_count > 0}
-                            <button $click={:play_part, part: 1} class="btn btn-sm btn-outline">
+                            <button $click={:play_part, part: 1} class="btn btn-sm btn-primary">
                               Play in parts ▶
                             </button>
                           {/if}
