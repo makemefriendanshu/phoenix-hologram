@@ -44,6 +44,14 @@ Every page is a Hologram page sharing one `DefaultLayout` (`lib/phoenix_hologram
 
 Every page also has a "Theme" picker (in the nav bar) listing all 35 daisyUI themes plus "System" — `light`/`dark` are the bespoke gold/cream and maroon/gold wedding palettes (`app.css`), the other 33 are daisyUI's stock presets. The full theme name list lives in `PhoenixHologramWeb.DaisyThemes`. The picked theme is stored under the `phx:theme` `localStorage` key, shared by `root.html.heex` and `DefaultLayout`, so it carries over between pages.
 
+### Footer
+
+`DefaultLayout`'s footer (below every page's `<slot />`) carries the same contact/social/CTA block as the marketing mockup: a WhatsApp-linked phone number, Instagram/YouTube icons, a "Register" button that jumps to `/`'s lead-capture form, and a copyright line with a server-computed year (`footer_year` state, set from `Date.utc_today().year`).
+
+### Milestone highlight in movie listings
+
+Any movie whose title contains "happy birthday" (case-insensitive) renders full-width (`sm:col-span-2`) with a gold/maroon card instead of the standard cream `card-stock` card, across all three listing grids (`/`, `/premiere`, `/admin`) — matching the milestone-card treatment in the design mockup, driven by a `highlight_card?/1` check in each page module rather than a hardcoded movie id. Every card's title is also a link into `/premiere/:id`, not just its thumbnail and "View Video" button.
+
 ### Loading spinner
 
 Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — the wedding logo above a gold spinner ring — if the initial load is taking a moment, so a slow connection doesn't leave visitors staring at a blank tab. It's built and torn down entirely in an inline `<script>`/`<style>` placed ahead of the `app.css` `<link>` in `<head>` (a stylesheet blocks execution of any synchronous `<script>` after it, so the overlay has to come first to render before app.css itself has necessarily finished loading), revealed only after a short delay so a fast load never flashes it, and hidden once `window.load` fires. On Hologram pages it's appended outside `<body>` rather than declared in the page template, since the Hologram client runtime replaces its whole rendered DOM tree on mount and would otherwise wipe out the overlay's state.
@@ -88,6 +96,7 @@ Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — 
 | 14 | Branded full-page loading spinner on slow initial loads | ✅ Done — see [Loading spinner](#loading-spinner) |
 | 15 | Admin-authored blurb + date/location on movie cards | ✅ Done — replaces the raw resolution/size line on `/premiere` and `/admin`; edited per movie from `/admin/movies/:id` |
 | 16 | Marketing-style header + nav on `/`, distinct from the rest of the site | ✅ Done — see [Theme](#theme); mobile nav wrapping fixed, see [Mobile layout](#mobile-layout) |
+| 17 | Marketing footer (contact/social/register) + milestone-video highlight in listings | ✅ Done — see [Footer](#footer) and [Milestone highlight in movie listings](#milestone-highlight-in-movie-listings) |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
