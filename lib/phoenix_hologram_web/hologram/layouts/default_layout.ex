@@ -30,6 +30,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
       |> put_state(:banner, props.banner)
       |> put_state(:hero_images, build_hero_images(movies))
       |> put_state(:themes, PhoenixHologramWeb.DaisyThemes.themes())
+      |> put_state(:footer_year, Date.utc_today().year)
       |> put_state(
         :nav_movies,
         Enum.map(movies, fn movie ->
@@ -459,8 +460,59 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
         <main id="page-content" class="flex-1">
           <slot />
         </main>
-        <footer class="footer footer-center border-t border-primary/30 text-base-content/70 p-4 text-sm">
-          <a href="/" class="link link-hover">&larr; Back to home</a>
+        <footer class="bg-secondary text-secondary-content">
+          <div class="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 sm:grid-cols-3 gap-6 items-center text-center sm:text-left">
+            <div class="flex flex-col gap-2 items-center sm:items-start">
+              <a
+                href="https://wa.me/919880538028"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 hover:text-primary"
+              >
+                <span class="hero-phone size-4 shrink-0"></span>
+                <span class="text-sm">+91 98805 38028</span>
+              </a>
+            </div>
+
+            <div class="flex flex-col items-center gap-2">
+              <span class="font-display text-xs tracking-[0.25em] uppercase text-primary">Social Media</span>
+              <div class="flex items-center gap-3">
+                <a
+                  href="https://www.instagram.com/ianshuman75"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Instagram"
+                  class="w-8 h-8 rounded-full border border-primary/60 flex items-center justify-center hover:bg-primary hover:text-secondary transition"
+                >
+                  <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <rect x="3.5" y="3.5" width="17" height="17" rx="4.5" />
+                    <circle cx="12" cy="12" r="3.6" />
+                    <circle cx="17" cy="7" r="0.9" fill="currentColor" stroke="none" />
+                  </svg>
+                </a>
+                <a
+                  href="https://www.youtube.com/@anshuman4527"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="YouTube"
+                  class="w-8 h-8 rounded-full border border-primary/60 flex items-center justify-center hover:bg-primary hover:text-secondary transition"
+                >
+                  <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <rect x="3" y="6" width="18" height="12" rx="3" />
+                    <path d="M10.5 9.5l4.5 2.5-4.5 2.5z" fill="currentColor" stroke="none" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            <div class="flex justify-center sm:justify-end">
+              <a href="/#start-your-story" class="btn btn-primary btn-sm">Register</a>
+            </div>
+          </div>
+
+          <div class="border-t border-primary/20 py-3 text-center text-xs tracking-wide text-secondary-content/70">
+            &copy; {@footer_year} Shubh Vivaha. All rights reserved.
+          </div>
         </footer>
 
         <script>
