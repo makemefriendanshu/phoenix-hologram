@@ -191,19 +191,35 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       label: "Original · " <> VideoMetadata.describe_quality(source_metadata)
     }
 
-    case VideoMetadata.fetch_preview(movie) do
-      nil ->
-        [source]
+    preview =
+      case VideoMetadata.fetch_preview(movie) do
+        nil ->
+          []
 
-      preview_metadata ->
-        [
-          source,
-          %{
-            key: "preview",
-            label: "Data saver · " <> VideoMetadata.describe_quality(preview_metadata)
-          }
-        ]
-    end
+        preview_metadata ->
+          [
+            %{
+              key: "preview",
+              label: "Data saver · " <> VideoMetadata.describe_quality(preview_metadata)
+            }
+          ]
+      end
+
+    minimal =
+      case VideoMetadata.fetch_minimal(movie) do
+        nil ->
+          []
+
+        minimal_metadata ->
+          [
+            %{
+              key: "minimal",
+              label: "Minimal · " <> VideoMetadata.describe_quality(minimal_metadata)
+            }
+          ]
+      end
+
+    [source] ++ preview ++ minimal
   end
 
   # Used to label the themed quality-picker dropdown's trigger button with

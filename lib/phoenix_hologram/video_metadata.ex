@@ -32,10 +32,25 @@ defmodule PhoenixHologram.VideoMetadata do
     end
   end
 
+  @doc """
+  Returns cached metadata for this movie's minimal-quality proxy, or
+  `nil` if no minimal proxy has been generated for it yet.
+  """
+  @spec fetch_minimal(Movie.t()) :: t() | nil
+  def fetch_minimal(movie) do
+    if VideoPreview.minimal_ready?(movie) do
+      fetch_path(VideoPreview.minimal_path(movie), minimal_cache_path(movie))
+    end
+  end
+
   @doc "One-line human summary, e.g. \"39 min · 1920x1080 · 5.7 GB\"."
   @spec describe(t()) :: String.t()
   def describe(metadata) do
-    [format_duration(metadata.duration_ms), format_resolution(metadata), format_size(metadata.size_bytes)]
+    [
+      format_duration(metadata.duration_ms),
+      format_resolution(metadata),
+      format_size(metadata.size_bytes)
+    ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" · ")
   end
@@ -107,7 +122,10 @@ defmodule PhoenixHologram.VideoMetadata do
   defp parse_duration(output) do
     case Regex.run(~r/Duration: (\d+):(\d+):(\d+\.\d+)/, output) do
       [_, hours, minutes, seconds] ->
-        ms = (String.to_integer(hours) * 3600 + String.to_integer(minutes) * 60 + String.to_float(seconds)) * 1000
+        ms =
+          (String.to_integer(hours) * 3600 + String.to_integer(minutes) * 60 +
+             String.to_float(seconds)) * 1000
+
         %{duration_ms: round(ms)}
 
       nil ->
@@ -139,6 +157,10 @@ defmodule PhoenixHologram.VideoMetadata do
 
   defp preview_cache_path(%Movie{id: id}) do
     Path.join(cache_dir(), "#{id}_preview.json")
+  end
+
+  defp minimal_cache_path(%Movie{id: id}) do
+    Path.join(cache_dir(), "#{id}_minimal.json")
   end
 
   defp encode(metadata), do: Jason.encode!(metadata)

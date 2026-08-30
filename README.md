@@ -35,7 +35,7 @@ Other mix tasks:
 ```bash
 mix test                       # ecto.create + ecto.migrate + test
 mix precommit                  # compile --warnings-as-errors, deps.unlock --unused, format, test
-mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps preview proxies for movies that lack one, for bandwidth-constrained playback
+mix premiere.generate_previews # (after app.start) cache 720p/2.5Mbps "preview" and 360p/700kbps "minimal" proxies for movies that lack them, for bandwidth-constrained playback
 ```
 
 ### Theme
@@ -71,7 +71,7 @@ Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — 
   - comments (replies + likes), each poster naming themselves and shown with an avatar of their name's initial
   - a like button — toggles liked/unliked within the current view, but (like focus votes) isn't remembered across reloads: refreshing always resets it to "ready to like", e.g. for a shared/kiosk screen, while the total count persists
   - a view count — recorded once per movie per page load, the first time playback actually starts (pausing/scrubbing/replaying doesn't add more)
-  - a themed quality-picker dropdown (original vs. low-bitrate preview) for playback and downloads (full movie, or independently-retryable parts via a dropdown) — see [Mobile layout](#mobile-layout) for how it (and the comment threads above) stay on-screen on phones
+  - a themed quality-picker dropdown (original, 720p "preview", or 360p "minimal") for playback and downloads (full movie, or independently-retryable parts via a dropdown) — see [Mobile layout](#mobile-layout) for how it (and the comment threads above) stay on-screen on phones
 
   Over the ngrok tunnel, large videos are bandwidth-capped (free tier), so playback can stall on multi-GB files — fine on localhost.
 
