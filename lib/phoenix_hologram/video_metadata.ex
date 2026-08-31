@@ -63,6 +63,22 @@ defmodule PhoenixHologram.VideoMetadata do
     |> Enum.join(" · ")
   end
 
+  @doc """
+  Probes a media file's duration directly, without the movie-keyed caching
+  `fetch/1` and friends use — for one-off durations like a video segment's.
+  """
+  @spec probe_duration_ms(String.t()) :: non_neg_integer | nil
+  def probe_duration_ms(path) do
+    case FrameExtractor.ffmpeg_path() do
+      {:ok, ffmpeg} ->
+        {output, _status} = System.cmd(ffmpeg, ["-i", path], stderr_to_stdout: true)
+        output |> parse_duration() |> Map.get(:duration_ms)
+
+      {:error, :ffmpeg_not_found} ->
+        nil
+    end
+  end
+
   @spec format_duration(non_neg_integer | nil) :: String.t() | nil
   def format_duration(nil), do: nil
 

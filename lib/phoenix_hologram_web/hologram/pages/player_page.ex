@@ -181,7 +181,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       qualities: qualities,
       selected_quality: selected_quality,
       selected_quality_label: quality_label(qualities, selected_quality),
-      selected_part: nil
+      selected_part: nil,
+      part_offset_ms: 0
     }
   end
 
@@ -241,13 +242,15 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     do: "/premiere/videos/#{movie_id}/download?quality=#{quality}"
 
   defp segment_downloads(movie, quality) do
-    segment_count = movie |> VideoSegments.ensure_generated!(quality) |> length()
-
-    Enum.map(1..segment_count, fn part ->
+    movie
+    |> VideoSegments.offsets_ms(quality)
+    |> Enum.with_index(1)
+    |> Enum.map(fn {offset_ms, part} ->
       %{
         part: part,
         url: "/premiere/videos/#{movie.id}/download/#{part}?quality=#{quality}",
-        play_url: play_url(movie.id, quality, part)
+        play_url: play_url(movie.id, quality, part),
+        offset_ms: offset_ms
       }
     end)
   end
@@ -340,7 +343,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         download_url: new_download_url,
         selected_quality: quality,
         selected_quality_label: quality_label(component.state.movie.qualities, quality),
-        selected_part: nil
+        selected_part: nil,
+        part_offset_ms: 0
     })
     |> put_command(:switch_download_quality, movie_id: movie_id, quality: quality)
   end
@@ -348,9 +352,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   # Jumps playback straight to one segment instead of the full video, so a
   # viewer on a slow connection can start watching a later part immediately
   # rather than waiting for (or re-buffering through) everything before it.
+  # Each part's own file clock restarts at 0, but the "who's in focus" panel
+  # matches scenes against movie-wide timestamps — part_offset_ms (looked up
+  # from the already-known segment_downloads, not re-probed here) tells the
+  # client-side polling script how much to add back to get there.
   def action(:play_part, params, component) do
     movie = component.state.movie
     new_video_url = play_url(movie.id, movie.selected_quality, params.part)
+    offset_ms = movie.segment_downloads |> Enum.find(&(&1.part == params.part)) |> Map.fetch!(:offset_ms)
 
     JS.exec("""
     const video = document.getElementById('player-video');
@@ -366,7 +375,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     put_state(component, :movie, %{
       movie
       | video_url: new_video_url,
-        selected_part: params.part
+        selected_part: params.part,
+        part_offset_ms: offset_ms
     })
   end
 
@@ -385,7 +395,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     }
     """)
 
-    put_state(component, :movie, %{movie | video_url: new_video_url, selected_part: nil})
+    put_state(component, :movie, %{
+      movie
+      | video_url: new_video_url,
+        selected_part: nil,
+        part_offset_ms: 0
+    })
   end
 
   def action(:segment_downloads_updated, params, component) do
@@ -611,6 +626,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                   id="player-video"
                   data-scene-boundaries={@scene_boundaries_json}
                   data-movie-id={@movie.id}
+                  data-part-offset-ms={@movie.part_offset_ms}
                   controls
                   poster={@movie.thumbnail_url}
                   class="w-full rounded-box shadow-xl"
@@ -764,7 +780,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       scenes = JSON.parse(video.dataset.sceneBoundaries || "[]");
                     }
 
-                    var currentMs = Math.round(video.currentTime * 1000);
+                    var partOffsetMs = parseInt(video.dataset.partOffsetMs, 10) || 0;
+                    var currentMs = partOffsetMs + Math.round(video.currentTime * 1000);
                     var idx = resolveSceneIndex(currentMs);
                     var scene = idx === -1 ? null : scenes[idx];
                     var key = scene ? (scene.start_ms + ":" + scene.end_ms) : "none";
