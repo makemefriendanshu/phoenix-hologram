@@ -838,7 +838,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       {%for face <- @current_scene.faces}
                         <button
                           $click={:focus_vote_clicked, movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}
-                          title={Enum.join(face.voted_ats, "\n")}
                           class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                         >
                           <img src={face.thumbnail_url} class="w-10 h-10 rounded-full object-cover shrink-0" />
