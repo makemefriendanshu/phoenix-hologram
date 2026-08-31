@@ -172,7 +172,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       id: movie.id,
       title: movie.title || movie.path,
       status: movie.status,
-      description: VideoMetadata.format_duration(metadata.duration_ms),
+      duration: VideoMetadata.format_duration(metadata.duration_ms),
+      description: movie.description,
       video_url: video_url(movie.id, selected_quality),
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail",
       download_url: download_url(movie.id, selected_quality),
@@ -612,11 +613,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
           </div>
         {%else}
           <h1 class="font-display text-2xl mt-4 mb-1">{@movie.title}</h1>
-          <div class="flex items-center gap-3 mb-4">
-            <p class="text-sm text-base-content/70">{@movie.description}</p>
-            <Link to={AdminMoviePage, id: @movie.id} class="btn btn-xs btn-secondary">
-              Admin View ⚙
-            </Link>
+          <div class="mb-4">
+            <div class="flex items-center gap-3">
+              <p class="text-sm text-base-content/70">{@movie.duration}</p>
+              <Link to={AdminMoviePage, id: @movie.id} class="btn btn-xs btn-secondary">
+                Admin View ⚙
+              </Link>
+            </div>
+            {%if @movie.description}
+              <p class="text-sm text-base-content/70 mt-1">{@movie.description}</p>
+            {/if}
           </div>
 
           <div class="relative flex flex-col lg:flex-row gap-4">
