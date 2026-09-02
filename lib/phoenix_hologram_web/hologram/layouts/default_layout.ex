@@ -219,7 +219,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
           <div class="max-w-5xl mx-auto flex flex-wrap justify-center items-center gap-x-3 gap-y-1 py-2 px-4 text-[0.65rem] sm:text-xs font-display tracking-[0.15em] uppercase">
             <a href="/" class="hover:underline shrink-0">Home</a>
             <span class="opacity-50 shrink-0">|</span>
-            <div class="dropdown shrink-0">
+            <div class="dropdown dropdown-hover shrink-0">
               <div tabindex="0" role="button" class="hover:underline cursor-pointer">How It Works ▾</div>
               <ul
                 tabindex="0"
@@ -257,7 +257,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
             <span class="opacity-50 shrink-0">|</span>
             <a href="/#celebrations" class="hover:underline shrink-0">View Core Example</a>
             <span class="opacity-50 shrink-0">|</span>
-            <div class="dropdown shrink-0">
+            <div class="dropdown dropdown-hover shrink-0">
               <div tabindex="0" role="button" class="hover:underline cursor-pointer">Feature Walkthrough ▾</div>
               <ul
                 tabindex="0"
@@ -287,7 +287,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
             <span class="opacity-50 shrink-0">|</span>
             <a href="/#start-your-story" class="hover:underline shrink-0">Create Yours</a>
             <span class="opacity-50 shrink-0">|</span>
-            <div class="dropdown shrink-0">
+            <div class="dropdown dropdown-hover shrink-0">
               <div tabindex="0" role="button" class="hover:underline cursor-pointer">Recognised Faces ▾</div>
               <ul
                 tabindex="0"
@@ -315,7 +315,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
               </ul>
             </div>
             <span class="opacity-50 shrink-0">|</span>
-            <div class="dropdown dropdown-end shrink-0">
+            <div class="dropdown dropdown-hover dropdown-end shrink-0">
               <div tabindex="0" role="button" class="hover:underline cursor-pointer">Theme ▾</div>
               <ul
                 tabindex="0"
