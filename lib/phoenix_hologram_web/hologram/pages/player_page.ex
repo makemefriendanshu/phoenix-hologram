@@ -47,7 +47,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:scenes, scenes_by_key)
       |> put_state(:current_scene, find_current_scene(scenes_list, 0))
       |> put_state(:scene_boundaries_json, scene_boundaries_json(scenes_list))
-      |> put_state(:scene_changing_fast?, false)
       |> put_state(:video_ended?, false)
 
     server = if movie, do: put_subscription(server, {:focus_votes, movie.id}), else: server
@@ -266,10 +265,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   # is an O(1) Map lookup rather than a scan through hundreds of scenes.
   def action(:scene_changed, params, component) do
     scene = Map.get(component.state.scenes, params.scene_key)
-
-    component
-    |> put_state(:current_scene, scene)
-    |> put_state(:scene_changing_fast?, Map.get(params, :fast_changing, false))
+    put_state(component, :current_scene, scene)
   end
 
   # Dispatched from the same polling interval that tracks scene changes,
@@ -290,13 +286,53 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   # command) keeps the voter from missing the scene while `cast_focus_vote`
   # makes its round trip — playback resumes once :focus_vote_updated
   # confirms this client's own vote was saved.
+  #
+  # The vote count/checkmark is flipped locally right here too, mirroring
+  # the toggle FocusPoll.toggle_vote will perform server-side, instead of
+  # waiting on the broadcast round trip to show any change — that round
+  # trip previously overlapped with the video still playing, but now that
+  # hover pauses playback the voter is watching the panel with nothing else
+  # to look at, so the same latency reads as a stuck click. The later
+  # :focus_vote_updated still lands and overwrites this guess with the
+  # authoritative count, self-correcting if it was wrong.
   def action(:focus_vote_clicked, params, component) do
     JS.exec("""
     const video = document.getElementById('player-video');
     if (video) { video.pause(); }
     """)
 
-    put_command(component, :cast_focus_vote,
+    key = scene_key(params.scene_start_ms, params.scene_end_ms)
+
+    scenes =
+      Map.update!(component.state.scenes, key, fn scene ->
+        faces =
+          scene.faces
+          |> Enum.map(fn face ->
+            if face.id == params.face_id do
+              now_mine? = !face.mine?
+              %{face | mine?: now_mine?, votes: face.votes + if(now_mine?, do: 1, else: -1)}
+            else
+              face
+            end
+          end)
+          |> mark_leading()
+
+        %{scene | faces: faces}
+      end)
+
+    current_scene =
+      case component.state.current_scene do
+        %{start_ms: s, end_ms: e} when s == params.scene_start_ms and e == params.scene_end_ms ->
+          Map.get(scenes, key)
+
+        other ->
+          other
+      end
+
+    component
+    |> put_state(:scenes, scenes)
+    |> put_state(:current_scene, current_scene)
+    |> put_command(:cast_focus_vote,
       movie_id: params.movie_id,
       scene_start_ms: params.scene_start_ms,
       scene_end_ms: params.scene_end_ms,
@@ -512,7 +548,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       end
 
     JS.exec("""
-    if (#{is_mine}) {
+    if (#{is_mine} && !window.__focusPanelHovered) {
       const video = document.getElementById('player-video');
       if (video) { video.play().catch(() => {}); }
     }
@@ -751,7 +787,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
                   var scenes = null;
                   var staleToleranceMs = 5000;
-                  var fastChangeThresholdMs = 1500;
                   var lastKey = "unset";
                   var viewRecordedForMovieId = null;
                   var wasEnded = false;
@@ -770,14 +805,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                     return idx;
                   }
 
-                  // A scene is "fast-changing" if the next one starts too soon
-                  // after it for a viewer to reliably click a vote before the
-                  // panel moves on — used to nudge them to pause instead.
-                  function isFastChanging(idx) {
-                    if (idx === -1 || idx + 1 >= scenes.length) { return false; }
-                    return (scenes[idx + 1].start_ms - scenes[idx].start_ms) < fastChangeThresholdMs;
-                  }
-
                   setInterval(function () {
                     var video = document.getElementById('player-video');
                     if (!video) { return; }
@@ -794,10 +821,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
                     if (key !== lastKey) {
                       lastKey = key;
-                      Hologram.dispatchAction('scene_changed', 'page', {
-                        scene_key: key,
-                        fast_changing: isFastChanging(idx)
-                      });
+                      Hologram.dispatchAction('scene_changed', 'page', { scene_key: key });
                     }
 
                     var movieId = video.dataset.movieId;
@@ -815,24 +839,71 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                     }
                   }, 200);
                 })();
+
+                // Pauses the video while the pointer is over the focus-vote
+                // panel, so a viewer has time to read faces and click a vote
+                // before the scene moves on, and resumes on mouse-out — but
+                // only if the video was actually playing when the hover
+                // started (so hovering never *starts* a paused video).
+                // mouseenter/mouseleave don't bubble, so this delegates from
+                // `document` in the capture phase instead of binding
+                // directly to the panel — which Hologram's own re-renders
+                // could otherwise orphan — and matches on `e.target` being
+                // the panel itself (not a descendant), since entering a
+                // child element like a vote button fires its own
+                // mouseenter/mouseleave without one for the panel too.
+                (function () {
+                  if (window.__focusHoverAttached) { return; }
+                  window.__focusHoverAttached = true;
+                  window.__focusPanelHovered = false;
+
+                  var wasPlayingBeforeHover = false;
+
+                  function setHoverStatus(text) {
+                    var status = document.getElementById('focus-hover-status');
+                    if (status) { status.textContent = text; }
+                  }
+
+                  document.addEventListener('mouseenter', function (e) {
+                    if (!e.target || e.target.id !== 'focus-vote-panel') { return; }
+                    window.__focusPanelHovered = true;
+                    setHoverStatus('⏸ Paused');
+                    var video = document.getElementById('player-video');
+                    if (!video) { return; }
+                    wasPlayingBeforeHover = !video.paused;
+                    video.pause();
+                  }, true);
+
+                  document.addEventListener('mouseleave', function (e) {
+                    if (!e.target || e.target.id !== 'focus-vote-panel') { return; }
+                    window.__focusPanelHovered = false;
+                    setHoverStatus('▶ Playing');
+                    var video = document.getElementById('player-video');
+                    if (video && wasPlayingBeforeHover) { video.play().catch(function () {}); }
+                  }, true);
+                })();
                 {/raw}
               </script>
             </div>
 
             <div class="flex flex-col lg:absolute lg:inset-y-0 lg:right-0 lg:w-96">
               <div class="card card-stock shadow flex-1 flex flex-col min-h-0 overflow-hidden">
-                <div class="card-body py-4 flex-1 flex flex-col min-h-0">
+                <div id="focus-vote-panel" class="card-body py-4 flex-1 flex flex-col min-h-0">
                   <h2 class="font-display text-lg mb-1">Who's in focus?</h2>
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <span class="text-[0.65rem] text-base-content/50">
+                      Hover here to pause and vote — move away to resume
+                    </span>
+                    <span id="focus-hover-status" class="badge badge-outline badge-xs whitespace-nowrap">
+                      ▶ Playing
+                    </span>
+                  </div>
                   {%if @current_scene == nil}
                     <p class="text-sm text-base-content/60">No one recognised at this point in the video.</p>
                   {%else}
                     <div class="flex items-center gap-2 mb-2">
                       <span class="badge badge-outline whitespace-nowrap">{@current_scene.time}</span>
-                      {%if @scene_changing_fast?}
-                        <span class="text-xs text-warning truncate">⏸ Changing fast — pause to vote</span>
-                      {%else}
-                        <span class="text-xs text-base-content/60 truncate">Vote live for who's on screen</span>
-                      {/if}
+                      <span class="text-xs text-base-content/60 truncate">Vote live for who's on screen</span>
                     </div>
                     <div class="flex-1 min-h-0 flex flex-wrap gap-2 overflow-y-auto content-start">
                       {%for face <- @current_scene.faces}

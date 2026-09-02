@@ -319,6 +319,53 @@ defmodule PhoenixHologramWeb.Hologram.Pages.ScienceOfFocusPage do
     put_state(component, :demo_current_scene, scene)
   end
 
+  # Flips the clicked face vote/count in the demo panel right away,
+  # mirroring the toggle the cast_focus_vote command will perform
+  # server-side, instead of leaving the button looking unresponsive until
+  # the broadcast round trip lands (see the same fix in PlayerPage and
+  # AdminMoviePage). focus_vote_updated below still lands moments later
+  # and reconciles this guess with the authoritative counts.
+  def action(:demo_focus_vote_clicked, params, component) do
+    key = scene_key(params.scene_start_ms, params.scene_end_ms)
+
+    demo_scenes =
+      Map.update!(component.state.demo_scenes, key, fn scene ->
+        faces =
+          scene.faces
+          |> Enum.map(fn face ->
+            if face.id == params.face_id do
+              now_mine? = !face.mine?
+              %{face | mine?: now_mine?, votes: face.votes + if(now_mine?, do: 1, else: -1)}
+            else
+              face
+            end
+          end)
+          |> mark_leading()
+
+        %{scene | faces: faces}
+      end)
+
+    demo_current_scene =
+      case component.state.demo_current_scene do
+        %{start_ms: s, end_ms: e} when s == params.scene_start_ms and e == params.scene_end_ms ->
+          Map.get(demo_scenes, key)
+
+        other ->
+          other
+      end
+
+    component
+    |> put_state(:demo_scenes, demo_scenes)
+    |> put_state(:demo_current_scene, demo_current_scene)
+    |> put_command(:cast_focus_vote,
+      movie_id: params.movie_id,
+      scene_start_ms: params.scene_start_ms,
+      scene_end_ms: params.scene_end_ms,
+      face_id: params.face_id,
+      voter_id: params.voter_id
+    )
+  end
+
   def action(:focus_vote_updated, params, component) do
     my_session_id = component.state.focus_session_id
     is_mine = params.voter_session_id == my_session_id
@@ -386,6 +433,50 @@ defmodule PhoenixHologramWeb.Hologram.Pages.ScienceOfFocusPage do
   def template do
     ~HOLO"""
     <div class="min-h-screen p-6">
+      <script>
+        {%raw}
+        // Same hover-to-pause/resume behavior as the player page focus
+        // vote panel (see PlayerPage template): pauses #science-demo-video
+        // while the pointer is over #focus-vote-panel and resumes on
+        // mouse-out, only if it was playing when the hover started.
+        // Delegated from document in the capture phase since
+        // mouseenter/mouseleave do not bubble; matches on target being the
+        // panel itself so moving between vote buttons inside it does not
+        // re-fire. Kept at the top level (not inside the demo modal
+        // markup) so it is part of the page initial HTML and the browser
+        // actually parses/runs it -- a script tag inserted later by
+        // Hologram own client-side DOM patching when the modal opens
+        // would not execute.
+        (function () {
+          if (window.__scienceFocusHoverAttached) { return; }
+          window.__scienceFocusHoverAttached = true;
+
+          var wasPlayingBeforeHover = false;
+
+          function setHoverStatus(text) {
+            var status = document.getElementById('focus-hover-status');
+            if (status) { status.textContent = text; }
+          }
+
+          document.addEventListener('mouseenter', function (e) {
+            if (!e.target || e.target.id !== 'focus-vote-panel') { return; }
+            setHoverStatus('⏸ Paused');
+            var video = document.getElementById('science-demo-video');
+            if (!video) { return; }
+            wasPlayingBeforeHover = !video.paused;
+            video.pause();
+          }, true);
+
+          document.addEventListener('mouseleave', function (e) {
+            if (!e.target || e.target.id !== 'focus-vote-panel') { return; }
+            setHoverStatus('▶ Playing');
+            var video = document.getElementById('science-demo-video');
+            if (video && wasPlayingBeforeHover) { video.play().catch(function () {}); }
+          }, true);
+        })();
+        {/raw}
+      </script>
+
       <div class="max-w-3xl mx-auto">
         <div class="flex items-center justify-center gap-3 mb-1">
           <svg viewBox="0 0 24 40" class="w-4 h-8 text-primary/70" fill="none" stroke="currentColor" stroke-width="1.2">
@@ -566,8 +657,16 @@ defmodule PhoenixHologramWeb.Hologram.Pages.ScienceOfFocusPage do
                 class="w-full lg:w-2/3 aspect-video rounded shrink-0 bg-black"
               ></video>
 
-              <div class="lg:w-1/3 lg:max-h-[70vh] lg:overflow-y-auto">
+              <div id="focus-vote-panel" class="lg:w-1/3 lg:max-h-[70vh] lg:overflow-y-auto">
                 <h3 class="text-sm font-semibold mb-2">Who's in focus?</h3>
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                  <span class="text-[0.65rem] text-base-content/50">
+                    Hover here to pause and vote — move away to resume
+                  </span>
+                  <span id="focus-hover-status" class="badge badge-outline badge-xs whitespace-nowrap">
+                    ▶ Playing
+                  </span>
+                </div>
                 {%if @demo_current_scene == nil}
                   <p class="text-sm text-base-content/60">No one recognised at this point in the video.</p>
                 {%else}
@@ -581,7 +680,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.ScienceOfFocusPage do
                     <div class="flex flex-wrap gap-2">
                       {%for face <- @demo_current_scene.faces}
                         <button
-                          $click={command: :cast_focus_vote, params: %{movie_id: @demo_movie_id, scene_start_ms: @demo_current_scene.start_ms, scene_end_ms: @demo_current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
+                          $click={:demo_focus_vote_clicked, movie_id: @demo_movie_id, scene_start_ms: @demo_current_scene.start_ms, scene_end_ms: @demo_current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}
                           class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                         >
                           <img src={face.thumbnail_url} class="w-10 h-10 rounded-full object-cover shrink-0" />
