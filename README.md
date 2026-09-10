@@ -12,6 +12,7 @@ Elixir web app: Phoenix backend + [Hologram](https://www.hologram.page/) fronten
 
 - Site: https://shubhvivahs.com
 - [Jira project](https://home.atlassian.com/o/a7222d2d-be5e-4578-b4c9-32861c2cc4c5/s/711a8a41-4bbd-40db-8c37-f122f871ce2f/project/VSZJZPCZ-1)
+- [Jira goal](https://home.atlassian.com/o/a7222d2d-be5e-4578-b4c9-32861c2cc4c5/s/711a8a41-4bbd-40db-8c37-f122f871ce2f/goal/VSZJZPCZ-23/about)
 
 ## Stack
 
