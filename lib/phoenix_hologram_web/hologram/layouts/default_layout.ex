@@ -5,9 +5,14 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
   alias Hologram.UI.Runtime
   alias PhoenixHologram.FaceDetection
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
+  alias PhoenixHologramWeb.Hologram.Pages.DashboardPage
+  alias PhoenixHologramWeb.Hologram.Pages.UploadPage
   alias PhoenixHologramWeb.Hologram.Pages.HowItWorksPage
+  alias PhoenixHologramWeb.Hologram.Pages.LoginPage
   alias PhoenixHologramWeb.Hologram.Pages.PlayerPage
   alias PhoenixHologramWeb.Hologram.Pages.PremierExperiencePage
+  alias PhoenixHologramWeb.Hologram.Pages.PricingPage
+  alias PhoenixHologramWeb.Hologram.Pages.RegisterPage
   alias PhoenixHologramWeb.Hologram.Pages.ScienceOfFocusPage
 
   # Shared site banner (identity band + gold nav + crossfading photo hero)
@@ -252,6 +257,15 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
                     </span>
                   </Link>
                 </li>
+                <li>
+                  <Link to={PricingPage} class="flex items-center gap-2 hover:bg-secondary hover:text-primary-content">
+                    <span class="hero-currency-rupee w-5 h-5 shrink-0"></span>
+                    <span>
+                      <span class="block">Pricing</span>
+                      <span class="block text-[0.6rem] opacity-70 normal-case tracking-normal">Bands that unlock Admin View</span>
+                    </span>
+                  </Link>
+                </li>
               </ul>
             </div>
             <span class="opacity-50 shrink-0">|</span>
@@ -315,6 +329,14 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
               </ul>
             </div>
             <span class="opacity-50 shrink-0">|</span>
+            <Link to={LoginPage} class="hover:underline shrink-0">Login</Link>
+            <span class="opacity-50 shrink-0">|</span>
+            <Link to={RegisterPage} class="hover:underline shrink-0">Register</Link>
+            <span class="opacity-50 shrink-0">|</span>
+            <Link to={DashboardPage} class="hover:underline shrink-0">Dashboard</Link>
+            <span class="opacity-50 shrink-0">|</span>
+            <Link to={UploadPage} class="hover:underline shrink-0">Manage Videos</Link>
+            <span class="opacity-50 shrink-0">|</span>
             <div class="dropdown dropdown-hover dropdown-end shrink-0">
               <div tabindex="0" role="button" class="hover:underline cursor-pointer">Theme ▾</div>
               <ul
@@ -373,6 +395,19 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
               </div>
             </div>
           {%else}
+            {%if @banner == :pricing}
+              <div class="relative px-6 py-8 sm:py-14 text-center">
+                <div class="inline-block border border-primary/80 px-6 py-4 sm:px-14 sm:py-6">
+                  <p class="font-display text-primary-content text-base sm:text-2xl font-semibold tracking-wide text-balance">
+                    Unlock Premium Admin Facilities
+                  </p>
+                  <p class="font-display text-primary-content/90 text-xs sm:text-lg mt-2 text-balance">
+                    Pricing bands for every celebration
+                  </p>
+                  <a href="#bands" class="btn btn-primary btn-sm sm:btn-md mt-4">View Pricing Bands</a>
+                </div>
+              </div>
+            {%else}
             <div class="absolute inset-x-0 bottom-0 px-6 pb-6 sm:pb-10 text-center">
               <div class="inline-block border border-primary/80 px-6 py-4 sm:px-14 sm:py-6">
                 <p class="font-display text-primary-content text-base sm:text-2xl tracking-wide">
@@ -383,6 +418,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
                 </p>
               </div>
             </div>
+            {/if}
           {/if}
         </div>
 

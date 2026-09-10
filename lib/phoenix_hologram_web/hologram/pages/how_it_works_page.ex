@@ -11,7 +11,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.HowItWorksPage do
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage
   alias PhoenixHologramWeb.Hologram.Pages.PremierExperiencePage
   alias PhoenixHologramWeb.Hologram.Pages.PremierePage
+  alias PhoenixHologramWeb.Hologram.Pages.PricingPage
   alias PhoenixHologramWeb.Hologram.Pages.ScienceOfFocusPage
+  alias PhoenixHologramWeb.Hologram.Pages.UpgradePage
 
   route "/how-it-works"
 
@@ -158,6 +160,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.HowItWorksPage do
             <div class="text-center mt-4">
               <Link to={AdminMoviesPage} class="btn btn-secondary btn-sm">Open Admin View</Link>
             </div>
+            <p class="text-center text-xs mt-2">
+              <Link to={PricingPage} class="link link-hover">See the pricing bands that unlock it &rarr;</Link>
+            </p>
+            <p class="text-center text-xs mt-1">
+              <Link to={UpgradePage} class="link link-hover">Already curating? See the Premium upgrade &rarr;</Link>
+            </p>
           </div>
         </div>
 
