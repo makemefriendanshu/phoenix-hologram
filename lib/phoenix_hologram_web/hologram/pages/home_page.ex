@@ -15,6 +15,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.HomePage do
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
   alias PhoenixHologramWeb.Hologram.Pages.PlayerPage
   alias PhoenixHologramWeb.Hologram.Pages.PremierePage
+  alias PhoenixHologramWeb.Hologram.Pages.ScienceOfFocusPage
 
   route "/"
 
@@ -217,6 +218,48 @@ defmodule PhoenixHologramWeb.Hologram.Pages.HomePage do
           <div>
             <div class="text-3xl">🔗</div>
             <p class="font-display text-sm mt-2">Custom Shareable Link</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="scientific-importance" class="py-10 px-6">
+        <div class="max-w-3xl mx-auto">
+          <div class="flex items-center justify-center gap-3 mb-1">
+            <svg viewBox="0 0 24 40" class="w-4 h-8 text-primary/70" fill="none" stroke="currentColor" stroke-width="1.2">
+              <path d="M12 2c-6 6-6 20 0 36" />
+              <circle cx="10" cy="10" r="2.5" fill="currentColor" stroke="none" opacity="0.55" />
+            </svg>
+            <h2 class="font-display text-xl sm:text-2xl text-center">
+              The Scientific Importance Of Focus
+            </h2>
+            <svg viewBox="0 0 24 40" class="w-4 h-8 text-primary/70 -scale-x-100" fill="none" stroke="currentColor" stroke-width="1.2">
+              <path d="M12 2c-6 6-6 20 0 36" />
+              <circle cx="10" cy="10" r="2.5" fill="currentColor" stroke="none" opacity="0.55" />
+            </svg>
+          </div>
+          <p class="text-center text-sm text-base-content/60 mb-6">
+            Why identifying who matters in every scene makes for a smarter, more resonant film.
+          </p>
+
+          <div class="card card-stock shadow-xl">
+            <div class="card-body">
+              <div class="flex items-start gap-4">
+                <div class="w-12 h-12 shrink-0 rounded-box bg-primary/10 border-2 border-primary/40 flex items-center justify-center">
+                  <span class="hero-eye w-6 h-6 text-primary"></span>
+                </div>
+                <div>
+                  <p class="text-sm text-base-content/70">
+                    Human visual processing is highly selective — we naturally foveate, directing our sharpest attention toward whichever face or gesture is visually salient, emotionally resonant, or narratively important. In a crowded celebration, knowing who commands that visual prominence is what separates a scene that lands from one that blurs together.
+                  </p>
+                  <p class="text-sm text-base-content/70 mt-3">
+                    Studies show that clearly-focused, prominent subjects lead to clearer emotional communication and stronger recall, while blurry or indistinct scenes create cognitive friction and disengagement. Our Focus Engine — pairing AI scene analysis with real community votes — exists to identify that ground-truth focus, scene by scene, for a truly immersive viewing experience.
+                  </p>
+                </div>
+              </div>
+              <div class="text-center mt-4">
+                <Link to={ScienceOfFocusPage} class="btn btn-primary btn-sm">See The Full Science &rarr;</Link>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -511,7 +511,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.ScienceOfFocusPage do
                 <div>
                   <h2 class="font-display text-base uppercase tracking-wide">The Scientific Importance Of Focus</h2>
                   <p class="text-sm text-base-content/70 mt-2">
-                    Human vision is selective — we naturally lock onto whichever face or gesture carries the emotional weight of a moment. A film where every frame is treated equally is exhausting to watch; a film that knows who mattered in each scene is the one people actually rewatch. Identifying that focus, scene by scene, is the whole point of the Focus Poll.
+                    Scientific research in visual neuroscience proves that human visual processing is highly selective. We naturally foveate — direct our most sensitive part of the retina, the fovea — towards elements that are visually salient, emotionally resonant, or narratively important.
+                  </p>
+                  <p class="text-sm text-base-content/70 mt-2">
+                    In a crowded celebration, identifying who commands visual prominence — the "Focus Winner" — is crucial for understanding a scene's emotional core and reducing cognitive load for the viewer.
+                  </p>
+                  <p class="text-sm text-base-content/70 mt-2">
+                    Studies show that well-focused, prominent individuals lead to clearer expressive communication and stronger emotional recall. Blurry or indistinct scenes create cognitive friction and disengagement. Our platform aims to identify this ground-truth focus, scene by scene — essential for a truly immersive viewing experience.
                   </p>
                 </div>
               </div>
