@@ -2,13 +2,19 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
   @moduledoc """
   Admin index: every ingested movie, with how many unique faces were
   recognised in it so far. Links into `AdminMoviePage` for the
-  per-movie scene browser.
+  per-movie scene browser. Also hosts the "Promo Requests" review queue
+  for UpgradePage's "Know the founder personally?" free-access
+  requests — approving one there grants the requested tier through
+  `PhoenixHologram.PromoRequests.approve_promo_request/1`, the only
+  place that actually happens (submitting a request no longer grants
+  anything by itself).
   """
 
   use Hologram.Page
 
   alias Hologram.UI.Link
   alias PhoenixHologram.FaceDetection
+  alias PhoenixHologram.PromoRequests
   alias PhoenixHologram.Repo
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
   alias PhoenixHologramWeb.Hologram.Pages.PlayerPage
@@ -17,7 +23,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
 
   layout PhoenixHologramWeb.Hologram.Layouts.DefaultLayout
 
-  def init(_params, component, _server) do
+  def init(_params, component, server) do
     movies =
       FaceDetection.list_movies_ordered()
       |> Repo.preload(:faces)
@@ -34,7 +40,45 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
         }
       end)
 
-    put_state(component, :movies, movies)
+    component =
+      component
+      |> put_state(:movies, movies)
+      |> put_state(:promo_requests, PromoRequests.list_promo_requests_view())
+
+    # Every open AdminMoviesPage tab picks up new/approved/rejected promo
+    # requests live — PromoRequests broadcasts on this channel from
+    # create_promo_request/1, approve_promo_request/1, and
+    # reject_promo_request/1, each carrying the freshly formatted list.
+    server = put_subscription(server, :promo_requests_changed)
+
+    {component, server}
+  end
+
+  def action(:approve_promo_request, params, component) do
+    put_command(component, :approve_promo_request, id: params.id)
+  end
+
+  def action(:reject_promo_request, params, component) do
+    put_command(component, :reject_promo_request, id: params.id)
+  end
+
+  def action(:promo_requests_reloaded, params, component) do
+    put_state(component, :promo_requests, params.requests)
+  end
+
+  # These commands don't need to return the reloaded list themselves
+  # (via put_action) — the context functions already broadcast it on
+  # :promo_requests_changed, which this page (like every other open one)
+  # is subscribed to, so the update arrives the same way regardless of
+  # which tab triggered it.
+  def command(:approve_promo_request, %{id: id}, server) do
+    PromoRequests.approve_promo_request(id)
+    server
+  end
+
+  def command(:reject_promo_request, %{id: id}, server) do
+    PromoRequests.reject_promo_request(id)
+    server
   end
 
   defp highlight_card?(movie) do
@@ -70,6 +114,83 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
               <circle cx="10" cy="10" r="2.5" fill="currentColor" stroke="none" opacity="0.55" />
             </svg>
           </div>
+          <div class="gold-divider w-24 mx-auto mb-6"></div>
+
+          <div class="mb-8">
+            <div class="flex items-center justify-center gap-2 mb-3">
+              <h3 class="font-display text-lg text-center">Promo Requests</h3>
+              {%if @promo_requests != []}
+                <span class="badge badge-outline badge-primary">
+                  {Enum.count(@promo_requests, &(&1.status == "pending"))} pending
+                </span>
+              {/if}
+            </div>
+
+            {%if @promo_requests == []}
+              <div class="card card-stock shadow-xl">
+                <div class="card-body">
+                  <p class="text-base-content/70">No free-access requests yet.</p>
+                </div>
+              </div>
+            {%else}
+              <div class="card card-stock shadow-xl overflow-x-auto">
+                <table class="table table-zebra">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Description</th>
+                      <th>Amount</th>
+                      <th>Code</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {%for request <- @promo_requests}
+                      <tr>
+                        <td class="text-xs whitespace-nowrap">{request.requested_at}</td>
+                        <td class="text-sm max-w-[16rem]">{request.description}</td>
+                        <td class="text-sm whitespace-nowrap">&#8377;{request.amount}</td>
+                        <td class="text-xs font-mono">{request.code}</td>
+                        <td>
+                          <span class={
+                            case request.status do
+                              "approved" -> "badge badge-success"
+                              "rejected" -> "badge badge-error"
+                              _ -> "badge badge-warning"
+                            end
+                          }>
+                            {request.status}
+                          </span>
+                        </td>
+                        <td class="whitespace-nowrap">
+                          {%if request.status == "pending"}
+                            <button $click={:approve_promo_request, id: request.id} class="btn btn-xs btn-primary">
+                              Approve
+                            </button>
+                            <button $click={:reject_promo_request, id: request.id} class="btn btn-xs btn-outline">
+                              Reject
+                            </button>
+                          {/if}
+                          {%if request.status == "rejected"}
+                            <button $click={:approve_promo_request, id: request.id} class="btn btn-xs btn-primary">
+                              Approve Anyway
+                            </button>
+                          {/if}
+                          {%if request.status == "approved"}
+                            <button $click={:reject_promo_request, id: request.id} class="btn btn-xs btn-outline">
+                              Revoke
+                            </button>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/for}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
+          </div>
+
           <div class="gold-divider w-24 mx-auto mb-6"></div>
 
           {%if @movies == []}

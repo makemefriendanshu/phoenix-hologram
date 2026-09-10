@@ -15,6 +15,12 @@ defmodule PhoenixHologramWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
+  # Companion Android app connects here to report UPI payment
+  # confirmations it read from SMS notifications — see PaymentSocket.
+  socket "/payment_socket", PhoenixHologramWeb.PaymentSocket,
+    websocket: true,
+    longpoll: false
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),

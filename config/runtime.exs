@@ -23,6 +23,16 @@ end
 config :phoenix_hologram, PhoenixHologramWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# Shared secret the companion Android app presents when connecting to
+# PaymentSocket. No env var set means every connection is rejected (fails
+# closed) — except in :dev, where a fixed insecure fallback keeps local
+# testing convenient without needing the env var. Never rely on that
+# fallback outside :dev.
+config :phoenix_hologram,
+       :payment_socket_token,
+       System.get_env("PAYMENT_SOCKET_TOKEN") ||
+         if(config_env() == :dev, do: "dev-only-insecure-payment-token")
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :phoenix_hologram, PhoenixHologramWeb.Endpoint,
