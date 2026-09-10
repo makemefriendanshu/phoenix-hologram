@@ -3,16 +3,17 @@ defmodule PhoenixHologramWeb.Hologram.Pages.DashboardPage do
   Visual "my account" dashboard only, shown with sample data (Rahul &
   Priya, a 65%-curated timeline) since there is no user/account system
   in the app yet — nothing here is tied to a real logged-in couple.
-  Buttons that have a genuine destination in the app today (Admin View,
-  Pricing, Generate Shareable Link, Invite Team) link there for real;
-  the rest ("View Timeline Preview") are decorative, matching how
-  LoginPage/RegisterPage/PricingPage handle features with no backend yet.
+  Buttons that have a genuine destination in the app today (Edit Event
+  Details, Pricing, Generate Shareable Link, Invite Team) link there
+  for real; the rest ("View Timeline Preview") are decorative, matching
+  how LoginPage/RegisterPage/PricingPage handle features with no
+  backend yet.
   """
 
   use Hologram.Page
 
   alias Hologram.UI.Link
-  alias PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage
+  alias PhoenixHologramWeb.Hologram.Pages.EditEventDetailsPage
   alias PhoenixHologramWeb.Hologram.Pages.GenerateLinkPage
   alias PhoenixHologramWeb.Hologram.Pages.InviteTeamPage
   alias PhoenixHologramWeb.Hologram.Pages.UpgradePage
@@ -97,7 +98,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.DashboardPage do
 
         <h2 class="font-display text-base text-center uppercase tracking-wide mt-8 mb-3">Quick Actions</h2>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Link to={AdminMoviesPage} class="btn btn-secondary btn-block h-auto py-3 flex-col gap-1">
+          <Link to={EditEventDetailsPage} class="btn btn-secondary btn-block h-auto py-3 flex-col gap-1">
             <span class="hero-pencil-square w-5 h-5"></span>
             <span class="text-xs">Edit Event Details</span>
           </Link>

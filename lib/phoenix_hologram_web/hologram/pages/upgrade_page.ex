@@ -47,6 +47,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.UpgradePage do
 
   alias Hologram.UI.Link
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage
+  alias PhoenixHologramWeb.Hologram.Pages.DashboardPage
   alias PhoenixHologramWeb.Hologram.Pages.HowItWorksPage
 
   @upi_vpa "anshumannie-2@okhdfcbank"
@@ -615,6 +616,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.UpgradePage do
         <div class="text-center mt-6">
           <Link to={HowItWorksPage} class="link link-hover text-sm">
             See the full guide to browsing, admin &amp; scene focus &rarr;
+          </Link>
+        </div>
+
+        <div class="flex flex-col items-center gap-3 mt-6">
+          <Link to={DashboardPage} class="btn btn-outline btn-block gap-2">
+            <span class="hero-arrow-right-end-on-rectangle w-4 h-4"></span>
+            Back To Dashboard
           </Link>
         </div>
       </div>

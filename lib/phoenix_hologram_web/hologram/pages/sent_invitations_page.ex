@@ -11,6 +11,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.SentInvitationsPage do
   use Hologram.Page
 
   alias Hologram.UI.Link
+  alias PhoenixHologramWeb.Hologram.Pages.DashboardPage
   alias PhoenixHologramWeb.Hologram.Pages.InviteTeamPage
 
   @invitations [
@@ -95,6 +96,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.SentInvitationsPage do
             <span class="hero-arrow-right-end-on-rectangle w-4 h-4"></span>
             Back To Invite Team
           </Link>
+          <Link to={DashboardPage} class="link link-hover text-sm">Back To Dashboard</Link>
         </div>
         <p class="text-center text-xs text-base-content/50 mt-3">
           Resending and revoking aren't wired up yet — everything above is a preview of the feature.
