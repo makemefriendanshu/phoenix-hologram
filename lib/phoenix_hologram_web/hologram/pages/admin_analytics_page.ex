@@ -7,8 +7,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage do
   to real traffic. Filters, export, and the visit log's rows are all
   decorative, matching how GenerateLinkPage/InviteTeamPage handle
   features with no backend yet. Reached from the "Admin Analytics" link
-  in DefaultLayout's site-wide nav bar (and from AdminMoviesPage's own
-  link into it).
+  in DefaultLayout's site-wide nav bar.
   """
 
   use Hologram.Page
