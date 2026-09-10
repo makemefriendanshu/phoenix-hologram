@@ -47,7 +47,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       |> put_state(:scenes, scenes_by_key)
       |> put_state(:current_scene, find_current_scene(scenes_list, 0))
       |> put_state(:scene_boundaries_json, scene_boundaries_json(scenes_list))
-      |> put_state(:scene_changing_fast?, false)
+      |> put_state(:video_ended?, false)
 
     server = if movie, do: put_subscription(server, {:focus_votes, movie.id}), else: server
 
@@ -111,7 +111,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         end_ms: scene.end_ms,
         time: format_scene(scene),
         faces:
-          Enum.map(scene.face_ids, fn face_id ->
+          scene.face_ids
+          |> Enum.map(fn face_id ->
             face_votes = Map.get(votes_by_face, face_id, [])
 
             %{
@@ -123,8 +124,17 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
               voted_ats: face_votes |> voted_ats() |> Enum.map(&format_timestamp/1)
             }
           end)
+          |> mark_leading()
       }
     end)
+  end
+
+  # Flags every face tied for the most votes so the panel can badge them
+  # all; an all-zero scene marks no one as leading.
+  defp mark_leading(faces) do
+    max_votes = faces |> Enum.map(& &1.votes) |> Enum.reduce(0, &max/2)
+
+    Enum.map(faces, &Map.put(&1, :leading?, max_votes > 0 and &1.votes == max_votes))
   end
 
   defp format_scene(%{start_ms: start_ms, end_ms: end_ms}) do
@@ -161,7 +171,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       id: movie.id,
       title: movie.title || movie.path,
       status: movie.status,
-      description: VideoMetadata.format_duration(metadata.duration_ms),
+      duration: VideoMetadata.format_duration(metadata.duration_ms),
+      description: movie.description,
       video_url: video_url(movie.id, selected_quality),
       thumbnail_url: "/premiere/videos/#{movie.id}/thumbnail",
       download_url: download_url(movie.id, selected_quality),
@@ -169,7 +180,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       segment_count: length(segment_downloads),
       qualities: qualities,
       selected_quality: selected_quality,
-      selected_quality_label: quality_label(qualities, selected_quality)
+      selected_quality_label: quality_label(qualities, selected_quality),
+      selected_part: nil,
+      part_offset_ms: 0
     }
   end
 
@@ -179,19 +192,35 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       label: "Original · " <> VideoMetadata.describe_quality(source_metadata)
     }
 
-    case VideoMetadata.fetch_preview(movie) do
-      nil ->
-        [source]
+    preview =
+      case VideoMetadata.fetch_preview(movie) do
+        nil ->
+          []
 
-      preview_metadata ->
-        [
-          source,
-          %{
-            key: "preview",
-            label: "Data saver · " <> VideoMetadata.describe_quality(preview_metadata)
-          }
-        ]
-    end
+        preview_metadata ->
+          [
+            %{
+              key: "preview",
+              label: "Data saver · " <> VideoMetadata.describe_quality(preview_metadata)
+            }
+          ]
+      end
+
+    minimal =
+      case VideoMetadata.fetch_minimal(movie) do
+        nil ->
+          []
+
+        minimal_metadata ->
+          [
+            %{
+              key: "minimal",
+              label: "Minimal · " <> VideoMetadata.describe_quality(minimal_metadata)
+            }
+          ]
+      end
+
+    [source] ++ preview ++ minimal
   end
 
   # Used to label the themed quality-picker dropdown's trigger button with
@@ -213,12 +242,21 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     do: "/premiere/videos/#{movie_id}/download?quality=#{quality}"
 
   defp segment_downloads(movie, quality) do
-    segment_count = movie |> VideoSegments.ensure_generated!(quality) |> length()
-
-    Enum.map(1..segment_count, fn part ->
-      %{part: part, url: "/premiere/videos/#{movie.id}/download/#{part}?quality=#{quality}"}
+    movie
+    |> VideoSegments.offsets_ms(quality)
+    |> Enum.with_index(1)
+    |> Enum.map(fn {offset_ms, part} ->
+      %{
+        part: part,
+        url: "/premiere/videos/#{movie.id}/download/#{part}?quality=#{quality}",
+        play_url: play_url(movie.id, quality, part),
+        offset_ms: offset_ms
+      }
     end)
   end
+
+  defp play_url(movie_id, quality, part),
+    do: "/premiere/videos/#{movie_id}/play/#{part}?quality=#{quality}"
 
   # Dispatched from plain JS (see the inline script in the template) only
   # when the resolved scene key actually changes — not on every tick — so
@@ -227,10 +265,80 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
   # is an O(1) Map lookup rather than a scan through hundreds of scenes.
   def action(:scene_changed, params, component) do
     scene = Map.get(component.state.scenes, params.scene_key)
+    put_state(component, :current_scene, scene)
+  end
+
+  # Dispatched from the same polling interval that tracks scene changes,
+  # rather than an "ended"/"play" event listener attached once: Hologram's
+  # own client-side render replaces the <video> DOM node shortly after page
+  # load, which would silently orphan a listener bound directly to it. The
+  # interval already re-queries the element fresh on every tick, so it stays
+  # correct regardless of node replacement.
+  def action(:video_ended, _params, component) do
+    put_state(component, :video_ended?, true)
+  end
+
+  def action(:video_playing, _params, component) do
+    put_state(component, :video_ended?, false)
+  end
+
+  # Pausing here (rather than leaving the vote button's $click as a plain
+  # command) keeps the voter from missing the scene while `cast_focus_vote`
+  # makes its round trip — playback resumes once :focus_vote_updated
+  # confirms this client's own vote was saved.
+  #
+  # The vote count/checkmark is flipped locally right here too, mirroring
+  # the toggle FocusPoll.toggle_vote will perform server-side, instead of
+  # waiting on the broadcast round trip to show any change — that round
+  # trip previously overlapped with the video still playing, but now that
+  # hover pauses playback the voter is watching the panel with nothing else
+  # to look at, so the same latency reads as a stuck click. The later
+  # :focus_vote_updated still lands and overwrites this guess with the
+  # authoritative count, self-correcting if it was wrong.
+  def action(:focus_vote_clicked, params, component) do
+    JS.exec("""
+    const video = document.getElementById('player-video');
+    if (video) { video.pause(); }
+    """)
+
+    key = scene_key(params.scene_start_ms, params.scene_end_ms)
+
+    scenes =
+      Map.update!(component.state.scenes, key, fn scene ->
+        faces =
+          scene.faces
+          |> Enum.map(fn face ->
+            if face.id == params.face_id do
+              now_mine? = !face.mine?
+              %{face | mine?: now_mine?, votes: face.votes + if(now_mine?, do: 1, else: -1)}
+            else
+              face
+            end
+          end)
+          |> mark_leading()
+
+        %{scene | faces: faces}
+      end)
+
+    current_scene =
+      case component.state.current_scene do
+        %{start_ms: s, end_ms: e} when s == params.scene_start_ms and e == params.scene_end_ms ->
+          Map.get(scenes, key)
+
+        other ->
+          other
+      end
 
     component
-    |> put_state(:current_scene, scene)
-    |> put_state(:scene_changing_fast?, Map.get(params, :fast_changing, false))
+    |> put_state(:scenes, scenes)
+    |> put_state(:current_scene, current_scene)
+    |> put_command(:cast_focus_vote,
+      movie_id: params.movie_id,
+      scene_start_ms: params.scene_start_ms,
+      scene_end_ms: params.scene_end_ms,
+      face_id: params.face_id,
+      voter_id: params.voter_id
+    )
   end
 
   # Swapping `src` via plain JS (rather than just re-rendering the `src`
@@ -271,9 +379,65 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
       | video_url: new_video_url,
         download_url: new_download_url,
         selected_quality: quality,
-        selected_quality_label: quality_label(component.state.movie.qualities, quality)
+        selected_quality_label: quality_label(component.state.movie.qualities, quality),
+        selected_part: nil,
+        part_offset_ms: 0
     })
     |> put_command(:switch_download_quality, movie_id: movie_id, quality: quality)
+  end
+
+  # Jumps playback straight to one segment instead of the full video, so a
+  # viewer on a slow connection can start watching a later part immediately
+  # rather than waiting for (or re-buffering through) everything before it.
+  # Each part's own file clock restarts at 0, but the "who's in focus" panel
+  # matches scenes against movie-wide timestamps — part_offset_ms (looked up
+  # from the already-known segment_downloads, not re-probed here) tells the
+  # client-side polling script how much to add back to get there.
+  def action(:play_part, params, component) do
+    movie = component.state.movie
+    new_video_url = play_url(movie.id, movie.selected_quality, params.part)
+    offset_ms = movie.segment_downloads |> Enum.find(&(&1.part == params.part)) |> Map.fetch!(:offset_ms)
+
+    JS.exec("""
+    const video = document.getElementById('player-video');
+    if (video) {
+      video.src = #{inspect(new_video_url)};
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }, { once: true });
+    }
+    """)
+
+    put_state(component, :movie, %{
+      movie
+      | video_url: new_video_url,
+        selected_part: params.part,
+        part_offset_ms: offset_ms
+    })
+  end
+
+  def action(:play_full, _params, component) do
+    movie = component.state.movie
+    new_video_url = video_url(movie.id, movie.selected_quality)
+
+    JS.exec("""
+    const video = document.getElementById('player-video');
+    if (video) {
+      video.src = #{inspect(new_video_url)};
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }, { once: true });
+    }
+    """)
+
+    put_state(component, :movie, %{
+      movie
+      | video_url: new_video_url,
+        selected_part: nil,
+        part_offset_ms: 0
+    })
   end
 
   def action(:segment_downloads_updated, params, component) do
@@ -359,7 +523,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
     scenes =
       Map.update!(component.state.scenes, key, fn scene ->
         faces =
-          Enum.map(scene.faces, fn face ->
+          scene.faces
+          |> Enum.map(fn face ->
             votes = Map.get(params.counts, face.id, 0)
             voted_ats = params.voted_ats |> Map.get(face.id, []) |> Enum.map(&format_timestamp/1)
 
@@ -368,6 +533,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
             %{face | votes: votes, mine?: mine?, voted_ats: voted_ats}
           end)
+          |> mark_leading()
 
         %{scene | faces: faces}
       end)
@@ -380,6 +546,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
         other ->
           other
       end
+
+    JS.exec("""
+    if (#{is_mine} && !window.__focusPanelHovered) {
+      const video = document.getElementById('player-video');
+      if (video) { video.play().catch(() => {}); }
+    }
+    """)
 
     component
     |> put_state(:scenes, scenes)
@@ -476,26 +649,83 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
           </div>
         {%else}
           <h1 class="font-display text-2xl mt-4 mb-1">{@movie.title}</h1>
-          <div class="flex items-center gap-3 mb-4">
-            <p class="text-sm text-base-content/70">{@movie.description}</p>
-            <span class="badge badge-outline badge-primary">{@movie.status}</span>
-            <Link to={AdminMoviePage, id: @movie.id} class="btn btn-xs btn-secondary">
-              Admin View ⚙
-            </Link>
+          <div class="mb-4">
+            <div class="flex items-center gap-3">
+              <p class="text-sm text-base-content/70">{@movie.duration}</p>
+              <Link to={AdminMoviePage, id: @movie.id} class="btn btn-xs btn-secondary">
+                Admin View ⚙
+              </Link>
+            </div>
+            {%if @movie.description}
+              <p class="text-sm text-base-content/70 mt-1">{@movie.description}</p>
+            {/if}
           </div>
 
           <div class="relative flex flex-col lg:flex-row gap-4">
             <div class="flex-1 min-w-0 lg:pr-[25rem]">
-              <video
-                id="player-video"
-                data-scene-boundaries={@scene_boundaries_json}
-                data-movie-id={@movie.id}
-                controls
-                poster={@movie.thumbnail_url}
-                class="w-full rounded-box shadow-xl"
-                src={@movie.video_url}
-              >
-              </video>
+              <div class="relative">
+                <video
+                  id="player-video"
+                  data-scene-boundaries={@scene_boundaries_json}
+                  data-movie-id={@movie.id}
+                  data-part-offset-ms={@movie.part_offset_ms}
+                  controls
+                  poster={@movie.thumbnail_url}
+                  class="w-full rounded-box shadow-xl"
+                  src={@movie.video_url}
+                >
+                </video>
+
+                {%if @video_ended?}
+                  <div class="absolute inset-0 flex items-center justify-center bg-black/70 rounded-box">
+                    <div class="flex flex-col items-center gap-3 p-4">
+                      <p class="text-white text-sm font-display">
+                        {%if @movie.selected_part}Part {@movie.selected_part} finished{%else}Video finished{/if}
+                      </p>
+                      <div class="flex flex-wrap justify-center gap-2">
+                        {%if @movie.selected_part && @movie.selected_part > 1}
+                          <button
+                            $click={:play_part, part: @movie.selected_part - 1}
+                            class="btn btn-sm btn-outline btn-primary bg-black/40"
+                          >
+                            ◀ Previous part
+                          </button>
+                        {/if}
+
+                        {%if @movie.selected_part}
+                          <button
+                            $click={:play_part, part: @movie.selected_part}
+                            class="btn btn-sm btn-outline btn-primary bg-black/40"
+                          >
+                            ↻ Replay
+                          </button>
+                        {%else}
+                          <button $click="play_full" class="btn btn-sm btn-outline btn-primary bg-black/40">
+                            ↻ Replay
+                          </button>
+                        {/if}
+
+                        {%if @movie.selected_part}
+                          {%if @movie.selected_part < @movie.segment_count}
+                            <button
+                              $click={:play_part, part: @movie.selected_part + 1}
+                              class="btn btn-sm btn-primary"
+                            >
+                              Next part ▶
+                            </button>
+                          {/if}
+                        {%else}
+                          {%if @movie.segment_count > 0}
+                            <button $click={:play_part, part: 1} class="btn btn-sm btn-primary">
+                              Play in parts ▶
+                            </button>
+                          {/if}
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+              </div>
 
               {%if length(@movie.qualities) > 1}
                 <div class="flex items-center gap-2 mt-2 flex-wrap">
@@ -520,6 +750,35 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                 </div>
               {/if}
 
+              {%if @movie.segment_count > 0}
+                <div class="flex items-center gap-2 mt-2 flex-wrap">
+                  <span class="text-xs text-base-content/60">Play in parts</span>
+                  <div class="dropdown dropdown-bottom">
+                    <div tabindex="0" role="button" class="btn btn-sm btn-outline h-auto py-2">
+                      {%if @movie.selected_part}Part {@movie.selected_part}{%else}Full video{/if} ▾
+                    </div>
+                    <ul tabindex="0" class="dropdown-content menu menu-sm card-stock rounded-box z-10 mt-1 w-44 max-w-[calc(100vw-6rem)] p-2 shadow">
+                      <li>
+                        <a $click="play_full" class={if @movie.selected_part == nil do "active" else "" end}>
+                          Full video
+                        </a>
+                      </li>
+                      {%for segment <- @movie.segment_downloads}
+                        <li>
+                          <a
+                            $click={:play_part, part: segment.part}
+                            class={if @movie.selected_part == segment.part do "active" else "" end}
+                          >
+                            Part {segment.part}
+                          </a>
+                        </li>
+                      {/for}
+                    </ul>
+                  </div>
+                  <span class="text-xs text-base-content/50">Jump in without waiting for the whole video</span>
+                </div>
+              {/if}
+
               <script>
                 {%raw}
                 (function () {
@@ -528,9 +787,9 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
                   var scenes = null;
                   var staleToleranceMs = 5000;
-                  var fastChangeThresholdMs = 1500;
                   var lastKey = "unset";
                   var viewRecordedForMovieId = null;
+                  var wasEnded = false;
 
                   function resolveSceneIndex(currentMs) {
                     var idx = -1;
@@ -546,14 +805,6 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                     return idx;
                   }
 
-                  // A scene is "fast-changing" if the next one starts too soon
-                  // after it for a viewer to reliably click a vote before the
-                  // panel moves on — used to nudge them to pause instead.
-                  function isFastChanging(idx) {
-                    if (idx === -1 || idx + 1 >= scenes.length) { return false; }
-                    return (scenes[idx + 1].start_ms - scenes[idx].start_ms) < fastChangeThresholdMs;
-                  }
-
                   setInterval(function () {
                     var video = document.getElementById('player-video');
                     if (!video) { return; }
@@ -562,17 +813,15 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       scenes = JSON.parse(video.dataset.sceneBoundaries || "[]");
                     }
 
-                    var currentMs = Math.round(video.currentTime * 1000);
+                    var partOffsetMs = parseInt(video.dataset.partOffsetMs, 10) || 0;
+                    var currentMs = partOffsetMs + Math.round(video.currentTime * 1000);
                     var idx = resolveSceneIndex(currentMs);
                     var scene = idx === -1 ? null : scenes[idx];
                     var key = scene ? (scene.start_ms + ":" + scene.end_ms) : "none";
 
                     if (key !== lastKey) {
                       lastKey = key;
-                      Hologram.dispatchAction('scene_changed', 'page', {
-                        scene_key: key,
-                        fast_changing: isFastChanging(idx)
-                      });
+                      Hologram.dispatchAction('scene_changed', 'page', { scene_key: key });
                     }
 
                     var movieId = video.dataset.movieId;
@@ -580,7 +829,58 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
                       viewRecordedForMovieId = movieId;
                       Hologram.dispatchAction('movie_played', 'page', { movie_id: movieId });
                     }
+
+                    if (video.ended && !wasEnded) {
+                      wasEnded = true;
+                      Hologram.dispatchAction('video_ended', 'page', {});
+                    } else if (!video.ended && wasEnded) {
+                      wasEnded = false;
+                      Hologram.dispatchAction('video_playing', 'page', {});
+                    }
                   }, 200);
+                })();
+
+                // Pauses the video while the pointer is over the focus-vote
+                // panel, so a viewer has time to read faces and click a vote
+                // before the scene moves on, and resumes on mouse-out — but
+                // only if the video was actually playing when the hover
+                // started (so hovering never *starts* a paused video).
+                // mouseenter/mouseleave don't bubble, so this delegates from
+                // `document` in the capture phase instead of binding
+                // directly to the panel — which Hologram's own re-renders
+                // could otherwise orphan — and matches on `e.target` being
+                // the panel itself (not a descendant), since entering a
+                // child element like a vote button fires its own
+                // mouseenter/mouseleave without one for the panel too.
+                (function () {
+                  if (window.__focusHoverAttached) { return; }
+                  window.__focusHoverAttached = true;
+                  window.__focusPanelHovered = false;
+
+                  var wasPlayingBeforeHover = false;
+
+                  function setHoverStatus(text) {
+                    var status = document.getElementById('focus-hover-status');
+                    if (status) { status.textContent = text; }
+                  }
+
+                  document.addEventListener('mouseenter', function (e) {
+                    if (!e.target || e.target.id !== 'focus-vote-panel') { return; }
+                    window.__focusPanelHovered = true;
+                    setHoverStatus('⏸ Paused');
+                    var video = document.getElementById('player-video');
+                    if (!video) { return; }
+                    wasPlayingBeforeHover = !video.paused;
+                    video.pause();
+                  }, true);
+
+                  document.addEventListener('mouseleave', function (e) {
+                    if (!e.target || e.target.id !== 'focus-vote-panel') { return; }
+                    window.__focusPanelHovered = false;
+                    setHoverStatus('▶ Playing');
+                    var video = document.getElementById('player-video');
+                    if (video && wasPlayingBeforeHover) { video.play().catch(function () {}); }
+                  }, true);
                 })();
                 {/raw}
               </script>
@@ -588,29 +888,36 @@ defmodule PhoenixHologramWeb.Hologram.Pages.PlayerPage do
 
             <div class="flex flex-col lg:absolute lg:inset-y-0 lg:right-0 lg:w-96">
               <div class="card card-stock shadow flex-1 flex flex-col min-h-0 overflow-hidden">
-                <div class="card-body py-4 flex-1 flex flex-col min-h-0">
+                <div id="focus-vote-panel" class="card-body py-4 flex-1 flex flex-col min-h-0">
                   <h2 class="font-display text-lg mb-1">Who's in focus?</h2>
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <span class="text-[0.65rem] text-base-content/50">
+                      Hover here to pause and vote — move away to resume
+                    </span>
+                    <span id="focus-hover-status" class="badge badge-outline badge-xs whitespace-nowrap">
+                      ▶ Playing
+                    </span>
+                  </div>
                   {%if @current_scene == nil}
                     <p class="text-sm text-base-content/60">No one recognised at this point in the video.</p>
                   {%else}
                     <div class="flex items-center gap-2 mb-2">
                       <span class="badge badge-outline whitespace-nowrap">{@current_scene.time}</span>
-                      {%if @scene_changing_fast?}
-                        <span class="text-xs text-warning truncate">⏸ Changing fast — pause to vote</span>
-                      {%else}
-                        <span class="text-xs text-base-content/60 truncate">Vote live for who's on screen</span>
-                      {/if}
+                      <span class="text-xs text-base-content/60 truncate">Vote live for who's on screen</span>
                     </div>
                     <div class="flex-1 min-h-0 flex flex-wrap gap-2 overflow-y-auto content-start">
                       {%for face <- @current_scene.faces}
                         <button
-                          $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
-                          title={Enum.join(face.voted_ats, "\n")}
+                          $click={:focus_vote_clicked, movie_id: @movie.id, scene_start_ms: @current_scene.start_ms, scene_end_ms: @current_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}
                           class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                         >
                           <img src={face.thumbnail_url} class="w-10 h-10 rounded-full object-cover shrink-0" />
                           <span class="text-xs normal-case text-left leading-tight">
-                            {face.label}<br />{face.votes} vote(s)
+                            {face.label}
+                            {%if face.leading?}
+                              <span class="badge badge-secondary badge-xs align-middle gap-1">🏆 leading</span>
+                            {/if}
+                            <br />{face.votes} vote(s)
                             {%if face.mine?}
                               <span class="block font-semibold">✓ your vote</span>
                             {/if}

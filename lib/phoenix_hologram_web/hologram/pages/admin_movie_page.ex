@@ -53,6 +53,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
       |> put_state(:face_count, length(faces))
       |> put_state(:scenes, scenes_by_key)
       |> put_state(:scene_buckets, scene_buckets(scenes_list))
+      |> put_state(:scene_boundaries_json, scene_boundaries_json(scenes_list))
       |> put_state(:current_preview_scene, nil)
       |> put_state(:scene_open, false)
 
@@ -85,11 +86,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   def action(:scene_shown, params, component) do
     component
     |> put_state(:current_preview_scene, params.scene)
-    |> put_action(
-      name: :play_scene_video,
-      params: %{src: params.src, duration_ms: params.duration_ms},
-      delay: 0
-    )
+    |> put_action(name: :play_scene_video, params: %{src: params.src}, delay: 0)
   end
 
   # The <video> has no `src` in the template at all — it's set here via
@@ -98,18 +95,14 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   # play() immediately after setting src turned out to still race the
   # browser's own resource-selection for the new source (the same
   # AbortException, just moved) — waiting for `loadedmetadata` before
-  # calling play() is what actually settles it. The pause-after-duration
-  # timer is a plain JS setTimeout started only once play() truly
-  # resolves, so it measures real playback time rather than however long
-  # metadata took to load.
+  # calling play() is what actually settles it.
   #
-  # Detections are sampled at ~1fps (see PlayerPage), so most scenes and
-  # face ranges are single-instant (start_ms == end_ms, duration_ms == 0)
-  # rather than an actual span — a badge showing one timestamp with no
-  # dash. For those, the media fragment (#t=start, no end) still seeks
-  # the <video> there once loaded, but play() is skipped entirely: with
-  # start and end the same, there's nothing to play, so the player parks
-  # on that exact frame instead of running on indefinitely past it.
+  # Plays forward past the clicked scene rather than auto-pausing at its
+  # end (the old behavior, back when this was a fire-and-forget preview
+  # clip) — same `data-scene-boundaries` + polling-driven scene tracking
+  # PlayerPage uses, so "Who's in focus?" keeps following along and stays
+  # votable as playback continues, instead of freezing on the one scene
+  # that was clicked.
   def action(:play_scene_video, params, component) do
     JS.exec("""
     const video = document.getElementById('scene-video');
@@ -119,24 +112,76 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
       video.src = #{inspect(params.src)};
 
       video.addEventListener('loadedmetadata', () => {
-        if (#{params.duration_ms} > 0) {
-          video.play()
-            .then(() => {
-              setTimeout(() => video.pause(), #{params.duration_ms});
-            })
-            .catch((err) => console.warn('scene preview: play() rejected:', err));
-        }
+        video.play().catch((err) => console.warn('scene preview: play() rejected:', err));
       }, { once: true });
     }
+
+    (function () {
+      if (window.__adminPreviewInterval) { clearInterval(window.__adminPreviewInterval); }
+
+      var scenes = null;
+      var staleToleranceMs = 5000;
+      var lastKey = "unset";
+
+      function resolveSceneIndex(currentMs) {
+        var idx = -1;
+        for (var i = 0; i < scenes.length; i++) {
+          if (scenes[i].start_ms <= currentMs) {
+            idx = i;
+          } else {
+            break;
+          }
+        }
+        if (idx === -1) { return -1; }
+        if (currentMs - scenes[idx].end_ms > staleToleranceMs) { return -1; }
+        return idx;
+      }
+
+      window.__adminPreviewInterval = setInterval(function () {
+        var video = document.getElementById('scene-video');
+        if (!video) {
+          clearInterval(window.__adminPreviewInterval);
+          window.__adminPreviewInterval = null;
+          return;
+        }
+
+        if (scenes === null) {
+          scenes = JSON.parse(video.dataset.sceneBoundaries || "[]");
+        }
+
+        var currentMs = Math.round(video.currentTime * 1000);
+        var idx = resolveSceneIndex(currentMs);
+        var scene = idx === -1 ? null : scenes[idx];
+        var key = scene ? (scene.start_ms + ":" + scene.end_ms) : "none";
+
+        if (key !== lastKey) {
+          lastKey = key;
+          Hologram.dispatchAction('preview_scene_changed', 'page', { scene_key: key });
+        }
+      }, 200);
+    })();
     """)
 
     component
+  end
+
+  # Dispatched only when the resolved scene key actually changes (see the
+  # polling loop in :play_scene_video above) — an O(1) Map lookup into
+  # the same @scenes map :show_scene already uses, rather than a scan
+  # through every scene on each tick.
+  def action(:preview_scene_changed, params, component) do
+    scene = Map.get(component.state.scenes, params.scene_key)
+    put_state(component, :current_preview_scene, scene)
   end
 
   def action(:close_player, _params, component) do
     JS.exec("""
     const video = document.getElementById('scene-video');
     if (video) { video.pause(); }
+    if (window.__adminPreviewInterval) {
+      clearInterval(window.__adminPreviewInterval);
+      window.__adminPreviewInterval = null;
+    }
     """)
 
     put_state(component, :scene_open, false)
@@ -211,6 +256,53 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
     }
 
     put_state(component, :movie, movie)
+  end
+
+  # Flips the clicked face's vote/count in the live preview panel right
+  # away, mirroring the toggle the :cast_focus_vote command will perform
+  # server-side, instead of leaving the button looking unresponsive until
+  # the broadcast round trip lands. Only the panel the voter is actually
+  # looking at is updated optimistically here (not scene_buckets or the
+  # all-recognised-faces grid, both hidden behind the modal anyway) —
+  # :focus_vote_updated below still lands moments later and reconciles
+  # everything, including this guess, with the authoritative counts.
+  def action(:focus_vote_clicked, params, component) do
+    key = scene_key(params.scene_start_ms, params.scene_end_ms)
+
+    scenes =
+      Map.update!(component.state.scenes, key, fn scene ->
+        faces =
+          Enum.map(scene.faces, fn face ->
+            if face.id == params.face_id do
+              now_mine? = !face.mine?
+              %{face | mine?: now_mine?, votes: face.votes + if(now_mine?, do: 1, else: -1)}
+            else
+              face
+            end
+          end)
+
+        %{scene | faces: faces}
+      end)
+
+    current_preview_scene =
+      case component.state.current_preview_scene do
+        %{start_ms: s, end_ms: e} when s == params.scene_start_ms and e == params.scene_end_ms ->
+          Map.get(scenes, key)
+
+        other ->
+          other
+      end
+
+    component
+    |> put_state(:scenes, scenes)
+    |> put_state(:current_preview_scene, current_preview_scene)
+    |> put_command(:cast_focus_vote,
+      movie_id: params.movie_id,
+      scene_start_ms: params.scene_start_ms,
+      scene_end_ms: params.scene_end_ms,
+      face_id: params.face_id,
+      voter_id: params.voter_id
+    )
   end
 
   # A movie can have thousands of detections and hundreds of scenes (see
@@ -366,25 +458,18 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
   # interpreter, so a movie with thousands of scenes doesn't blow the stack.
   def command(:show_scene, params, server) do
     start_seconds = div(params.start_ms, 1000)
-    end_seconds = div(params.end_ms, 1000)
-    duration_ms = params.end_ms - params.start_ms
 
-    # Media fragment start,end asks the browser itself to stop at the end
-    # (native support varies), and :play_scene_video's own JS-side timer
-    # enforces it explicitly regardless — belt and suspenders.
-    fragment =
-      if end_seconds > start_seconds,
-        do: "#{start_seconds},#{end_seconds}",
-        else: "#{start_seconds}"
-
-    src = "/premiere/videos/#{params.movie_id}#t=#{fragment}"
+    # Only a start point in the media fragment, no end — some browsers
+    # honor a temporal fragment's end by stopping there natively, which
+    # would fight the now-continuous playback (see :play_scene_video).
+    src = "/premiere/videos/#{params.movie_id}#t=#{start_seconds}"
 
     preloaded = Movie |> Repo.get!(params.movie_id) |> Repo.preload(faces: :detections)
     votes_by_scene = scene_votes_by_key(params.movie_id)
     scenes_list = movie_scenes(preloaded, votes_by_scene, params.focus_session_id)
     scene = find_scene_at(scenes_list, params.start_ms)
 
-    put_action(server, :scene_shown, scene: scene, src: src, duration_ms: duration_ms)
+    put_action(server, :scene_shown, scene: scene, src: src)
   end
 
   def command(:persist_label, params, server) do
@@ -478,6 +563,15 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
 
   defp scene_values(scenes) when is_map(scenes), do: Map.values(scenes)
   defp scene_values(scenes) when is_list(scenes), do: scenes
+
+  # Only start/end timestamps — enough for the client-side JS to figure
+  # out which scene index is current as the preview keeps playing, same
+  # as PlayerPage's own scene_boundaries_json/1.
+  defp scene_boundaries_json(scenes) do
+    scenes
+    |> Enum.map(&%{start_ms: &1.start_ms, end_ms: &1.end_ms})
+    |> Jason.encode!()
+  end
 
   defp scene_votes_by_key(movie_id) do
     movie_id
@@ -639,6 +733,50 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
             </div>
           </div>
         {%else}
+          <script>
+            {%raw}
+            // Same hover-to-pause/resume behavior as the player page focus
+            // vote panel (see PlayerPage template): pauses #scene-video
+            // while the pointer is over #focus-vote-panel and resumes on
+            // mouse-out, only if it was playing when the hover started.
+            // Delegated from document in the capture phase since
+            // mouseenter/mouseleave do not bubble; matches on target being
+            // the panel itself so moving between vote buttons inside it
+            // does not re-fire. Kept at the top level (not inside the
+            // scene-preview modal markup) so it is part of the page initial
+            // HTML and the browser actually parses/runs it -- a script tag
+            // inserted later by Hologram own client-side DOM patching when
+            // the modal opens would not execute.
+            (function () {
+              if (window.__adminFocusHoverAttached) { return; }
+              window.__adminFocusHoverAttached = true;
+
+              var wasPlayingBeforeHover = false;
+
+              function setHoverStatus(text) {
+                var status = document.getElementById('focus-hover-status');
+                if (status) { status.textContent = text; }
+              }
+
+              document.addEventListener('mouseenter', function (e) {
+                if (!e.target || e.target.id !== 'focus-vote-panel') { return; }
+                setHoverStatus('⏸ Paused');
+                var video = document.getElementById('scene-video');
+                if (!video) { return; }
+                wasPlayingBeforeHover = !video.paused;
+                video.pause();
+              }, true);
+
+              document.addEventListener('mouseleave', function (e) {
+                if (!e.target || e.target.id !== 'focus-vote-panel') { return; }
+                setHoverStatus('▶ Playing');
+                var video = document.getElementById('scene-video');
+                if (video && wasPlayingBeforeHover) { video.play().catch(function () {}); }
+              }, true);
+            })();
+            {/raw}
+          </script>
+
           <div class="flex flex-col sm:flex-row gap-4 mt-4 mb-6">
             <img
               src={@movie.thumbnail_url}
@@ -900,18 +1038,34 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
               </div>
 
               <div class="flex flex-col lg:flex-row gap-4">
-                <video id="scene-video" controls muted class="w-full lg:w-2/3 aspect-video rounded shrink-0"></video>
+                <video
+                  id="scene-video"
+                  controls
+                  muted
+                  data-scene-boundaries={@scene_boundaries_json}
+                  class="w-full lg:w-2/3 aspect-video rounded shrink-0"
+                ></video>
 
-                {%if @current_preview_scene != nil}
-                  <div class="lg:w-1/3 lg:max-h-[70vh] lg:overflow-y-auto">
-                    <h3 class="text-sm font-semibold mb-2">Who's in focus?</h3>
+                <div id="focus-vote-panel" class="lg:w-1/3 lg:max-h-[70vh] lg:overflow-y-auto">
+                  <h3 class="text-sm font-semibold mb-2">Who's in focus?</h3>
+                  <div class="flex items-center gap-2 mb-2 flex-wrap">
+                    <span class="text-[0.65rem] text-base-content/50">
+                      Hover here to pause and vote — move away to resume
+                    </span>
+                    <span id="focus-hover-status" class="badge badge-outline badge-xs whitespace-nowrap">
+                      ▶ Playing
+                    </span>
+                  </div>
+                  {%if @current_preview_scene == nil}
+                    <p class="text-sm text-base-content/60">No one recognised at this point in the scene.</p>
+                  {%else}
                     {%if @current_preview_scene.faces == []}
                       <p class="text-sm text-base-content/60">No one recognised at this point in the scene.</p>
                     {%else}
                       <div class="flex flex-wrap gap-2">
                         {%for face <- @current_preview_scene.faces}
                           <button
-                            $click={command: :cast_focus_vote, params: %{movie_id: @movie.id, scene_start_ms: @current_preview_scene.start_ms, scene_end_ms: @current_preview_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}}
+                            $click={:focus_vote_clicked, movie_id: @movie.id, scene_start_ms: @current_preview_scene.start_ms, scene_end_ms: @current_preview_scene.end_ms, face_id: face.id, voter_id: @focus_session_id}
                             title={Enum.join(face.voted_ats, "\n")}
                             class={if face.mine? do "btn btn-primary h-auto py-2 px-3 gap-2" else "btn btn-outline h-auto py-2 px-3 gap-2" end}
                           >
@@ -926,8 +1080,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviePage do
                         {/for}
                       </div>
                     {/if}
-                  </div>
-                {/if}
+                  {/if}
+                </div>
               </div>
             </div>
           </div>

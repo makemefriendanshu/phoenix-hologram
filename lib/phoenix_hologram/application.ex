@@ -13,6 +13,7 @@ defmodule PhoenixHologram.Application do
       {DNSCluster, query: Application.get_env(:phoenix_hologram, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: PhoenixHologram.PubSub},
       PhoenixHologram.FaceDetection.ModelServer,
+      PhoenixHologram.PaymentStore,
       # Start to serve requests, typically the last entry
       PhoenixHologramWeb.Endpoint
     ]
