@@ -16,6 +16,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
   alias PhoenixHologram.FaceDetection
   alias PhoenixHologram.PromoRequests
   alias PhoenixHologram.Repo
+  alias PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
   alias PhoenixHologramWeb.Hologram.Pages.PlayerPage
 
@@ -113,6 +114,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage do
               <path d="M12 2c-6 6-6 20 0 36" />
               <circle cx="10" cy="10" r="2.5" fill="currentColor" stroke="none" opacity="0.55" />
             </svg>
+          </div>
+          <div class="flex justify-center mb-4">
+            <Link to={AdminAnalyticsPage} class="btn btn-outline btn-sm gap-2">
+              <span class="hero-chart-bar w-4 h-4"></span>
+              Admin Analytics
+            </Link>
           </div>
           <div class="gold-divider w-24 mx-auto mb-6"></div>
 

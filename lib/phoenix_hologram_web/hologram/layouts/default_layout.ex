@@ -4,6 +4,7 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
   alias Hologram.UI.Link
   alias Hologram.UI.Runtime
   alias PhoenixHologram.FaceDetection
+  alias PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviePage
   alias PhoenixHologramWeb.Hologram.Pages.DashboardPage
   alias PhoenixHologramWeb.Hologram.Pages.UploadPage
@@ -336,6 +337,8 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
             <Link to={DashboardPage} class="hover:underline shrink-0">Dashboard</Link>
             <span class="opacity-50 shrink-0">|</span>
             <Link to={UploadPage} class="hover:underline shrink-0">Manage Videos</Link>
+            <span class="opacity-50 shrink-0">|</span>
+            <Link to={AdminAnalyticsPage} class="hover:underline shrink-0">Admin Analytics</Link>
             <span class="opacity-50 shrink-0">|</span>
             <div class="dropdown dropdown-hover dropdown-end shrink-0">
               <div tabindex="0" role="button" class="hover:underline cursor-pointer">Theme ▾</div>
