@@ -49,7 +49,7 @@ Every page also has a "Theme" picker (in the nav bar) listing all 35 daisyUI the
 
 ### Footer
 
-`DefaultLayout`'s footer (below every page's `<slot />`) carries the same contact/social/CTA block as the marketing mockup: a WhatsApp-linked phone number, Instagram/YouTube icons, a "Register" button that jumps to `/`'s lead-capture form, and a copyright line with a server-computed year (`footer_year` state, set from `Date.utc_today().year`).
+`DefaultLayout`'s footer (below every page's `<slot />`) carries the same contact/social/CTA block as the marketing mockup: a WhatsApp-linked phone number, Instagram/YouTube/GitHub icons (the GitHub one linking to this repo), a "Register" button that jumps to `/`'s lead-capture form, and a copyright line with a server-computed year (`footer_year` state, set from `Date.utc_today().year`).
 
 ### Milestone highlight in movie listings
 

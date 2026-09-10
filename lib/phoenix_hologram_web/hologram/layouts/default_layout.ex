@@ -467,6 +467,17 @@ defmodule PhoenixHologramWeb.Hologram.Layouts.DefaultLayout do
                     <path d="M10.5 9.5l4.5 2.5-4.5 2.5z" fill="currentColor" stroke="none" />
                   </svg>
                 </a>
+                <a
+                  href="https://github.com/makemefriendanshu/phoenix-hologram"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="GitHub"
+                  class="w-8 h-8 rounded-full border border-primary/60 flex items-center justify-center hover:bg-primary hover:text-secondary transition"
+                >
+                  <svg viewBox="0 0 24 24" class="w-4 h-4" fill="currentColor" stroke="none">
+                    <path d="M12 2.2c-5.5 0-10 4.5-10 10 0 4.4 2.9 8.2 6.8 9.5.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-4.9 0-1.1.4-2 1-2.6-.1-.3-.4-1.3.1-2.6 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.3.2 2.3.1 2.6.6.6 1 1.5 1 2.6 0 3.8-2.4 4.6-4.6 4.9.4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5 3.9-1.3 6.8-5.1 6.8-9.5 0-5.5-4.5-10-10-10z" />
+                  </svg>
+                </a>
               </div>
             </div>
 
