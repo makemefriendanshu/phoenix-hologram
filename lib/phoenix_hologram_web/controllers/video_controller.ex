@@ -53,6 +53,18 @@ defmodule PhoenixHologramWeb.VideoController do
     end
   end
 
+  def play_chunk(conn, %{"id" => id, "part" => part_str} = params) do
+    with %Movie{} = movie <- Repo.get(Movie, id),
+         {part, ""} <- Integer.parse(part_str),
+         quality <- VideoPreview.normalize_quality(movie, params["quality"]),
+         segments <- VideoSegments.ensure_generated!(movie, quality),
+         true <- part in 1..length(segments) do
+      stream_video(conn, Enum.at(segments, part - 1))
+    else
+      _ -> send_resp(conn, 404, "Not found")
+    end
+  end
+
   defp download_filename(movie, path) do
     "#{safe_title(movie)}#{Path.extname(path)}"
   end

@@ -208,3 +208,8 @@ p, span, td, li {
   25% { opacity: 0; }
   100% { opacity: 0; }
 }
+
+/* .hologram-loading rules live inline in the layout's <head>, not here —
+   the overlay has to render correctly before this stylesheet (which can
+   be large) has necessarily finished loading on a slow connection. See
+   default_layout.ex. */
