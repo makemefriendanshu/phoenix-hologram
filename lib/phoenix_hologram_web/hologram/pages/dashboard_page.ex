@@ -4,8 +4,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.DashboardPage do
   Priya, a 65%-curated timeline) since there is no user/account system
   in the app yet — nothing here is tied to a real logged-in couple.
   Buttons that have a genuine destination in the app today (Admin View,
-  Pricing) link there for real; the rest ("Invite Team", "Generate
-  Shareable Link", "View Timeline Preview") are decorative, matching how
+  Pricing, Generate Shareable Link) link there for real; the rest
+  ("Invite Team", "View Timeline Preview") are decorative, matching how
   LoginPage/RegisterPage/PricingPage handle features with no backend yet.
   """
 
@@ -13,6 +13,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.DashboardPage do
 
   alias Hologram.UI.Link
   alias PhoenixHologramWeb.Hologram.Pages.AdminMoviesPage
+  alias PhoenixHologramWeb.Hologram.Pages.GenerateLinkPage
   alias PhoenixHologramWeb.Hologram.Pages.UpgradePage
   alias PhoenixHologramWeb.Hologram.Pages.UploadPage
 
@@ -103,13 +104,13 @@ defmodule PhoenixHologramWeb.Hologram.Pages.DashboardPage do
             <span class="hero-envelope w-5 h-5"></span>
             <span class="text-xs">Invite Team</span>
           </span>
-          <span class="btn btn-secondary btn-block h-auto py-3 flex-col gap-1 pointer-events-none">
+          <Link to={GenerateLinkPage} class="btn btn-secondary btn-block h-auto py-3 flex-col gap-1">
             <span class="hero-link w-5 h-5"></span>
             <span class="text-xs">Generate Shareable Link</span>
-          </span>
+          </Link>
         </div>
         <p class="text-center text-xs text-base-content/50 mt-3">
-          Team invites and shareable links are coming soon.
+          Team invites are coming soon.
         </p>
 
         <p class="text-center text-sm text-base-content/70 mt-8">
