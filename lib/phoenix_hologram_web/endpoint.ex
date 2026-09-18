@@ -46,6 +46,15 @@ defmodule PhoenixHologramWeb.Endpoint do
     cookie_key: "request_logger"
 
   plug Plug.RequestId
+
+  # Traffic reaches Bandit through a local proxy/tunnel (dev port-forwarding,
+  # or any reverse proxy in front of this app), so conn.remote_ip is that
+  # proxy's own loopback address, not the actual visitor's. RemoteIp rewrites
+  # it from X-Forwarded-For, but only when the direct peer is itself a
+  # trusted proxy (loopback/private ranges by default) - an internet client
+  # can't spoof its way past that by sending its own X-Forwarded-For header.
+  plug RemoteIp
+
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
@@ -56,6 +65,7 @@ defmodule PhoenixHologramWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+  plug PhoenixHologramWeb.Plugs.PageVisitLogger
   plug Hologram.Router
   plug PhoenixHologramWeb.Router
 end
