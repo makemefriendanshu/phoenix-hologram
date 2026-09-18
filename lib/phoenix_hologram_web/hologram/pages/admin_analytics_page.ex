@@ -65,6 +65,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage do
       component
       |> put_view_state(dashboard, filters, build_view(dashboard))
       |> put_state(:loading_more?, false)
+      |> put_state(:filters_visible?, true)
 
     # Analytics.record_visit/1 broadcasts here on every page view site-wide,
     # so any open dashboard refreshes right away - the 15s timer is just a
@@ -72,6 +73,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage do
     server = put_subscription(server, :page_visits_changed)
 
     {component, server}
+  end
+
+  # Pure client-side UI toggle - the field values underneath are untouched,
+  # so this never needs a server round trip.
+  def action(:toggle_filters, _params, component) do
+    put_state(component, :filters_visible?, not component.state.filters_visible?)
   end
 
   # Keeps whatever column sort is already active; new filter criteria
@@ -434,6 +441,12 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage do
   defp filter_active?(value) when value in [nil, ""], do: false
   defp filter_active?(_value), do: true
 
+  defp filters_toggle_icon(true), do: "hero-chevron-up w-4 h-4"
+  defp filters_toggle_icon(false), do: "hero-chevron-down w-4 h-4"
+
+  defp filters_toggle_label(true), do: "Hide Filters"
+  defp filters_toggle_label(false), do: "Show Filters"
+
   # Appends a highlight ring to a filter input's base classes when it is
   # currently narrowing the results, so the admin can tell at a glance which
   # of the (now eight) filter fields are actually doing something.
@@ -525,7 +538,26 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage do
 
         <form $submit="apply_filters" class="card card-stock shadow-xl mb-6">
           <div class="card-body">
-            <div class="flex flex-wrap items-end gap-2">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <button type="button" $click="toggle_filters" class="btn btn-sm btn-ghost gap-1">
+                <span class={filters_toggle_icon(@filters_visible?)}></span>
+                {filters_toggle_label(@filters_visible?)}
+              </button>
+              <div class="flex items-center gap-2">
+                {%if active_filter_count(@filters) > 0 or sort_active?(@filters)}
+                  {%if active_filter_count(@filters) > 0}
+                    <span class="badge badge-primary badge-sm">{active_filter_count(@filters)} filter(s) active</span>
+                  {%else}
+                    <span class="badge badge-outline badge-sm">custom sort</span>
+                  {/if}
+                  <button type="button" $click="clear_filters" class="btn btn-xs btn-ghost">Clear Filters</button>
+                {/if}
+                <a href={@dashboard.export_url} class="btn btn-xs btn-outline">Export Visit Log To CSV</a>
+              </div>
+            </div>
+
+            {%if @filters_visible?}
+            <div class="flex flex-wrap items-end gap-2 mt-3">
               <div class="flex flex-col">
                 <label class="text-xs text-base-content/50 mb-1" for="analytics-from">From</label>
                 <input id="analytics-from" type="date" name="from" value={@filters.from} class={filter_class("input input-bordered input-sm w-36", @filters.from)} />
@@ -586,7 +618,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage do
               <div class="flex flex-col">
                 <label class="text-xs text-base-content/50 mb-1" for="analytics-max-duration">Max ms</label>
                 {%if @dashboard.duration_range}
-                  <p class="text-[10px] text-base-content/40 mb-1 whitespace-nowrap">
+                  <p class="text-xs text-base-content/40 mb-1 whitespace-nowrap">
                     actual: {@dashboard.duration_range.min}–{@dashboard.duration_range.max} ms
                   </p>
                 {/if}
@@ -601,18 +633,8 @@ defmodule PhoenixHologramWeb.Hologram.Pages.AdminAnalyticsPage do
                 />
               </div>
               <button type="submit" class="btn btn-sm btn-primary">Apply</button>
-              <div class="flex items-center gap-2 ml-auto">
-                {%if active_filter_count(@filters) > 0 or sort_active?(@filters)}
-                  {%if active_filter_count(@filters) > 0}
-                    <span class="badge badge-primary badge-sm">{active_filter_count(@filters)} filter(s) active</span>
-                  {%else}
-                    <span class="badge badge-outline badge-sm">custom sort</span>
-                  {/if}
-                  <button type="button" $click="clear_filters" class="btn btn-xs btn-ghost">Clear Filters</button>
-                {/if}
-                <a href={@dashboard.export_url} class="btn btn-xs btn-outline">Export Visit Log To CSV</a>
-              </div>
             </div>
+            {/if}
           </div>
         </form>
 
