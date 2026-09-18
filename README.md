@@ -72,6 +72,10 @@ Every page (`root.html.heex` and `DefaultLayout`) shows a full-page overlay — 
 
 Every piece here is deliberately honest about what's real: "Select Band" and the Login/Register/Dashboard/Upload forms are presentational (no backend), while the UPI QR, the WhatsApp links, and the promo-request review workflow are real and load-bearing.
 
+### Page-visit tracking
+
+`PhoenixHologramWeb.Plugs.PageVisitLogger` (mounted in the endpoint pipeline, ahead of `Hologram.Router`) records every Hologram page view into `page_visits` via `PhoenixHologram.Analytics` — both a fresh browser load and a subsequent client-side `Link` navigation, resolving each one to its friendly route path (e.g. `/premiere/:id` with the real id filled in) rather than Hologram's internal request path. Each row carries path, visitor IP, referrer, HTTP method, status, and response time. The `remote_ip` plug sits ahead of it so the recorded IP reflects the real client behind whatever reverse proxy/tunnel fronts the app, not the proxy's own address. Only visits recorded since this shipped are counted; there's no backfill for earlier traffic. `/admin/analytics` (see [Pages](#pages)) is the only consumer today.
+
 ### Pages
 
 - `/` — landing page, including a "Scientific Importance of Focus" section (foveation, cognitive load, emotional recall) that links through to the full `/science-of-focus` explainer.
@@ -79,7 +83,7 @@ Every piece here is deliberately honest about what's real: "Select Band" and the
 - `/premiere` — the movie listing grid: title, thumbnail, and, once an admin has filled them in from `/admin/movies/:id`, a blurb plus a "date | location" line — in place of raw file metadata (resolution/size are still shown in the player's quality picker, see below).
 - `/admin` — the movie listing grid, and nothing else; `/admin/promo-requests` and `/admin/analytics` are reached from the site-wide nav bar, not linked from here.
 - `/admin/promo-requests` — table of free-access requests submitted from `/upgrade` (see [Payments & free-access requests](#payments--free-access-requests)), with Approve/Reject (and "Approve Anyway"/"Revoke" to flip a decision either way) — live-updating across every open tab on new submissions, approvals, and rejections, not just a manual reload. Linked from the site-wide nav bar.
-- `/admin/analytics` — visual-only admin analytics dashboard: top visited URLs, total link clicks, a unique-IP breakdown by region (donut), other metrics (premium activations, session duration, feedback rating), and a detailed visit-log table (date/time, visitor IP, URL, referrer, action, response time). Linked from the site-wide nav bar. No request/visit-tracking system exists yet, so it's sample data, not real traffic — filters and export are decorative.
+- `/admin/analytics` — real admin analytics dashboard backed by page-visit tracking (see [Page-visit tracking](#page-visit-tracking)): top visited URLs, total page views, a real top-IPs breakdown (donut — there's no geo-IP database, so it's IPs rather than invented regions), other metrics (premium activations, average response time, traffic growth vs. the prior period, comments posted), and a sortable, infinite-scrolling visit-log table (date/time in IST, visitor IP, URL, referrer, method, response time). Filterable by date range, link, visitor IP, HTTP method, referrer, and response-time range, each with a visible highlight when active and a one-click "Clear Filters"; a matching CSV export follows the same filters. Live updates push to any open tab within about a second of a new visit anywhere on the site (60s fallback poll), without disrupting an admin who has scrolled past the first page of results. Linked from the site-wide nav bar.
 - `/admin/movies/:id` — per-movie scene timeline and recognised faces (nameable, with thumbnails and timestamp ranges badged as playable clips, each carrying a focus-vote count that always matches the scene shown when clicked). The scene-preview modal shows the clip and the "who's in focus" voting panel side by side, with the same hover-to-pause behavior as `/premiere/:id`. Also has an "Edit listing details" panel for that movie's blurb, event date, and location.
 - `/premiere/:id` — plays a movie, with:
   - the movie's duration and, if set, its admin-authored blurb, both above the video (the blurb previously wasn't wired up here — it rendered on `/premiere` and `/admin` but got silently shadowed by the duration string on this page)
@@ -127,8 +131,9 @@ Every piece here is deliberately honest about what's real: "Select Band" and the
 | 24 | Visual-only Invite Team + Manage Sent Invitations pages, linked from Dashboard | ✅ Done — no team/invite backend exists yet; see [Pages](#pages) |
 | 25 | Visual-only Edit Event Details page, linked from Dashboard (fixing a quick action that used to open `/admin` instead); every dashboard sub-page links back to Dashboard | ✅ Done — no event-editing backend exists yet; see [Pages](#pages) |
 | 26 | "Scientific Importance of Focus" section on the home page, and a fuller scientific-importance writeup on `/science-of-focus` (foveation, cognitive load, emotional recall) | ✅ Done — see [Pages](#pages) |
-| 27 | Visual-only Admin Analytics dashboard (visited URLs, link clicks, unique IPs, visit log), linked from the site nav bar | ✅ Done — no request/visit-tracking backend exists yet; see [Pages](#pages) |
+| 27 | Visual-only Admin Analytics dashboard (visited URLs, link clicks, unique IPs, visit log), linked from the site nav bar | ✅ Done — superseded by #29; see [Pages](#pages) |
 | 28 | Split the Promo Requests table out of `/admin` into its own `/admin/promo-requests` page, linked from the site nav bar | ✅ Done — see [Pages](#pages) |
+| 29 | Make Admin Analytics real: page-visit tracking with the real client IP behind the tunnel, working filters (date range/link/IP/method/referrer/response-time range) with a matching CSV export, a sortable + infinite-scrolling visit log, and live updates pushed to every open tab | ✅ Done — see [Page-visit tracking](#page-visit-tracking) and [Pages](#pages) |
 
 Legend: 🔲 Not started · 🟡 In progress · ✅ Done
 
