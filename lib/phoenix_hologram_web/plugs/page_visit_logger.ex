@@ -30,9 +30,20 @@ defmodule PhoenixHologramWeb.Plugs.PageVisitLogger do
 
   @spec call(Plug.Conn.t(), keyword) :: Plug.Conn.t()
   def call(conn, _opts) do
-    case resolve_page_path(conn) do
-      nil -> conn
-      path -> track(conn, path)
+    # Hologram.Router itself no-ops the same way when disabled (its own
+    # supervision tree - including PageModuleResolver's persistent_term -
+    # isn't started then), so mirror that guard here too: without it,
+    # PageModuleResolver.resolve/1 raises ArgumentError ("no persistent term
+    # stored with this key") on every request, wherever Hologram isn't
+    # running - not just under `mix test`, but any environment that boots
+    # without HOLOGRAM_START=1.
+    if Hologram.enabled?() do
+      case resolve_page_path(conn) do
+        nil -> conn
+        path -> track(conn, path)
+      end
+    else
+      conn
     end
   end
 
