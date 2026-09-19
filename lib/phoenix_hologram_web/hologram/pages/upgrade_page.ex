@@ -36,7 +36,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.UpgradePage do
   anything on submission — it creates a `"pending"` row in
   `PhoenixHologram.PromoRequests` (see the `:generate_promo_code`
   command) and opens a WhatsApp message so the owner knows to review it.
-  Approving a request on `AdminMoviesPage`'s "Promo Requests" section is
+  Approving a request on `PromoRequestsPage` is
   what actually grants the tier, through the exact same PaymentStore +
   realtime broadcast path a real UPI payment uses, so an approved
   request is indistinguishable from a payment to the logic above.
@@ -182,7 +182,7 @@ defmodule PhoenixHologramWeb.Hologram.Pages.UpgradePage do
   # anything by itself: it creates a "pending" PromoRequest (see
   # PhoenixHologram.PromoRequests) and opens a pre-filled WhatsApp
   # message to the owner so they know to go review it. Only an explicit
-  # approval on AdminMoviesPage's "Promo Requests" section actually
+  # approval on PromoRequestsPage actually
   # grants the tier, via the same PaymentStore + realtime broadcast path
   # a real UPI payment uses — see PromoRequests.approve_promo_request/1.
   def action(:generate_promo_code_clicked, params, component) do

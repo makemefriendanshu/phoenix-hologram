@@ -73,7 +73,8 @@ defmodule PhoenixHologram.MixProject do
       {:hologram, "~> 0.10.1"},
       {:ecto_sql, "~> 3.14"},
       {:ecto_sqlite3, "~> 0.15"},
-      {:evision, "~> 0.2"}
+      {:evision, "~> 0.2"},
+      {:remote_ip, "~> 1.2"}
     ]
   end
 

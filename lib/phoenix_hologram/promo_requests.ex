@@ -17,7 +17,7 @@ defmodule PhoenixHologram.PromoRequests do
 
   @doc """
   Creates a pending promo request and broadcasts the change on
-  `:promo_requests_changed`, so any open AdminMoviesPage tab picks up
+  `:promo_requests_changed`, so any open PromoRequestsPage tab picks up
   the new row live instead of only on its next manual reload/action.
   """
   def create_promo_request(attrs) do
@@ -32,7 +32,7 @@ defmodule PhoenixHologram.PromoRequests do
     Repo.all(from p in PromoRequest, order_by: [desc: p.inserted_at])
   end
 
-  @doc "Lists every promo request as plain view-model maps, for AdminMoviesPage's table."
+  @doc "Lists every promo request as plain view-model maps, for PromoRequestsPage's table."
   def list_promo_requests_view do
     list_promo_requests()
     |> Enum.map(fn request ->
@@ -112,7 +112,7 @@ defmodule PhoenixHologram.PromoRequests do
     )
   end
 
-  # Bare-atom channel any AdminMoviesPage instance subscribes to (see its
+  # Bare-atom channel any PromoRequestsPage instance subscribes to (see its
   # init/3) — pushes the freshly formatted list directly in the broadcast
   # payload so a subscribed page just applies it, no extra command round
   # trip needed to re-fetch.

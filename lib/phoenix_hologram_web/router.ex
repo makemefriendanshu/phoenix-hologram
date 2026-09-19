@@ -23,6 +23,7 @@ defmodule PhoenixHologramWeb.Router do
     get "/premiere/videos/:id/download/:part", VideoController, :download_chunk
     get "/premiere/videos/:id/play/:part", VideoController, :play_chunk
     get "/admin/faces/:id/thumbnail", FaceThumbnailController, :show
+    get "/admin/analytics/export.csv", AdminAnalyticsCsvController, :export
   end
 
   # Other scopes may use custom stacks.
